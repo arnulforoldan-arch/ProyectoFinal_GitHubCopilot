@@ -1,0 +1,420 @@
+@* Página de detalles de orden (reutilizable embebida o standalone) *@
+@page "/orders/{id:int}"
+@rendermode InteractiveServer
+@inject AdventureWorks.Enterprise.WebApp.Services.ApiService ApiService
+@inject AdventureWorks.Enterprise.WebApp.Services.NotificationService NotificationService
+@inject NavigationManager Navigation
+
+@if (!Embedded)
+{
+    <PageTitle>Detalles de Orden - Sistema de Gestión Empresarial</PageTitle>
+}
+<link href="css/CorporateTheme.css" rel="stylesheet" />
+
+<!-- Contenedor principal (oculta contenido base si modal abierto) -->
+<div class="@(showEditModal ? "main-content-hidden" : "")">
+    @if (!Embedded)
+    {
+        <div class="page-header">
+            <div class="header-content">
+                <button class="btn-gradient btn-back" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver</button>
+                <h1><i class="fas fa-shopping-cart"></i> Detalles de la Orden</h1>
+            </div>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="loading-section"><div class="loading-spinner"></div><p>Cargando detalles de la orden...</p></div>
+    }
+    else if (order == null)
+    {
+        <div class="empty-state">
+            <i class="fas fa-exclamation-triangle empty-icon"></i>
+            <h3>Orden no encontrada</h3>
+            <p>No se pudo encontrar una orden con el ID @Id.</p>
+            @if (!Embedded)
+            {
+                <button class="btn-gradient" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver a la lista</button>
+            }
+        </div>
+    }
+    else
+    {
+        <!-- Tarjeta principal -->
+        <div class="order-details-container">
+            <div class="order-header-card">
+                <div class="order-main-info">
+                    <h2>@order.SalesOrderNumber</h2>
+                    <p>ID: @order.SalesOrderId</p>
+                    <span class="badge @(GetStatusClass(order.Status))">@GetStatusText(order.Status)</span>
+                </div>
+                <div class="order-total"><div class="total-amount">@FormatCurrency(order.TotalDue)</div></div>
+            </div>
+
+            <div class="actions-top" style="margin: .5rem 0 1rem; display:flex; gap:.5rem; justify-content:flex-end;">
+                <button class="btn-gradient" @onclick="EditOrder"><i class="fas fa-edit"></i> Editar</button>
+            </div>
+
+            <div class="details-grid">
+                <!-- Cliente -->
+                <div class="details-section">
+                    <h3><i class="fas fa-user"></i> Información del Cliente</h3>
+                    <div class="detail-row"><span class="detail-label">ID del Cliente:</span><span class="detail-value">@order.CustomerId</span></div>
+                    @if (!string.IsNullOrEmpty(order.AccountNumber))
+                    {
+                        <div class="detail-row"><span class="detail-label">Número de Cuenta:</span><span class="detail-value">@order.AccountNumber</span></div>
+                    }
+                </div>
+                <!-- Fechas -->
+                <div class="details-section">
+                    <h3><i class="fas fa-calendar"></i> Fechas</h3>
+                    <div class="detail-row"><span class="detail-label">Fecha de Orden:</span><span class="detail-value">@order.OrderDate.ToString("dd/MM/yyyy")</span></div>
+                    <div class="detail-row"><span class="detail-label">Fecha de Vencimiento:</span><span class="detail-value">@order.DueDate.ToString("dd/MM/yyyy")</span></div>
+                    @if (order.ShipDate.HasValue)
+                    {
+                        <div class="detail-row"><span class="detail-label">Fecha de Envío:</span><span class="detail-value">@order.ShipDate.Value.ToString("dd/MM/yyyy")</span></div>
+                    }
+                </div>
+                <!-- Financiero -->
+                <div class="details-section">
+                    <h3><i class="fas fa-dollar-sign"></i> Desglose Financiero</h3>
+                    <div class="detail-row"><span class="detail-label">Subtotal:</span><span class="detail-value">@FormatCurrency(order.SubTotal)</span></div>
+                    <div class="detail-row"><span class="detail-label">Impuestos:</span><span class="detail-value">@FormatCurrency(order.TaxAmt)</span></div>
+                    <div class="detail-row"><span class="detail-label">Envío:</span><span class="detail-value">@FormatCurrency(order.Freight)</span></div>
+                    <div class="detail-row total-row"><span class="detail-label">Total:</span><span class="detail-value">@FormatCurrency(order.TotalDue)</span></div>
+                </div>
+            </div>
+            @if (!Embedded)
+            {
+                <div class="actions-section"><button class="btn-gradient btn-outline" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver</button></div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Modal de edición -->
+@if (showEditModal && editOrder != null)
+{
+    <div class="global-modal-wrapper">
+        <div class="modal-overlay modal-backdrop order-edit-modal" @onclick="CloseEditModal">
+            <div class="modal-content modal-edit" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h3><i class="fas fa-edit"></i> Editar Orden de Venta - @editOrder.SalesOrderNumber</h3>
+                    <button class="modal-close" @onclick="CloseEditModal" disabled="@isEditing"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(editErrorMessage)) { <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>@editErrorMessage</div> }
+                    <div class="form-info"><p><i class="fas fa-info-circle"></i> <strong>Campos editables:</strong> Fechas, estado y comentarios.</p></div>
+                    <!-- Sección solo lectura -->
+                    <div class="form-section">
+                        <h4>Información de la Orden (Solo lectura)</h4>
+                        <div class="form-row"><div class="form-group"><label>ID de Orden:</label><input type="text" value="@editOrder.SalesOrderId" class="form-control" disabled /></div><div class="form-group"><label>Número de Orden:</label><input type="text" value="@editOrder.SalesOrderNumber" class="form-control" disabled /></div></div>
+                        <div class="form-row"><div class="form-group"><label>Cliente ID:</label><input type="text" value="@editOrder.CustomerId" class="form-control" disabled /></div><div class="form-group"><label>Total:</label><input type="text" value="@editOrder.TotalDue.ToString("C2")" class="form-control" disabled /></div></div>
+                    </div>
+                    <!-- Campos editables -->
+                    <div class="form-section">
+                        <h4>Campos Editables</h4>
+                        <div class="form-row">
+                            <div class="form-group"><label>Fecha de Orden: *</label><input type="date" @bind="editOrder.OrderDate" class="form-control @(HasDateValidationError() ? "error" : "")" max="@DateTime.Today.ToString("yyyy-MM-dd")" disabled="@isEditing" /></div>
+                            <div class="form-group"><label>Fecha Vencimiento: *</label><input type="date" @bind="editOrder.DueDate" class="form-control @(HasDateValidationError() ? "error" : "")" min="@editOrder.OrderDate.ToString("yyyy-MM-dd")" disabled="@isEditing" /></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Fecha de Envío:</label><div class="form-check" style="margin-bottom: 6px;"><input type="checkbox" @bind="editHasShipDate" disabled="@isEditing" /><label class="form-check-label">Incluir fecha de envío</label></div><input type="date" @bind="editShipDateTemp" class="form-control" min="@editOrder.OrderDate.ToString("yyyy-MM-dd")" disabled="@(isEditing || !editHasShipDate)" /></div>
+                            <div class="form-group"><label>Estado: *</label><select @bind="editOrder.Status" class="form-control" disabled="@isEditing"><option value="1">Pendiente</option><option value="2">Aprobada</option><option value="3">Enviada</option><option value="4">Cancelada</option><option value="5">Completada</option></select></div>
+                        </div>
+                        <div class="form-group"><label>Comentarios:</label><textarea @bind="editOrder.Comment" class="form-control" rows="3" maxlength="128" placeholder="Comentarios adicionales" disabled="@isEditing"></textarea><small class="form-text">@(editOrder.Comment?.Length ?? 0)/128 caracteres</small></div>
+                        @if (HasDateValidationError())
+                        {
+                            <div class="validation-errors"><div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i><strong>Validación de Fechas:</strong><ul><li>Vencimiento posterior a la orden</li><li>Envío no anterior a la orden</li><li>Orden no futura</li></ul></div></div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-gradient btn-outline" @onclick="CloseEditModal" disabled="@isEditing">Cancelar</button>
+                    <button class="btn-gradient" @onclick="ConfirmEdit" disabled="@(isEditing || HasDateValidationError())">@if (isEditing){<i class="fas fa-spinner fa-spin"></i><span>Actualizando...</span>}else{<i class="fas fa-save"></i><span>Guardar Cambios</span>}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public bool Embedded { get; set; } = false;
+
+    private AdventureWorks.Enterprise.WebApp.Models.SalesOrder? order;
+    private bool isLoading = true;
+    
+    private bool showEditModal = false;
+    private bool isEditing = false;
+    private string editErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.SalesOrder? editOrder = null;
+    private bool editHasShipDate = false;
+    private DateTime editShipDateTemp = DateTime.Today;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            order = await ApiService.GetOrderAsync(Id);
+            editOrder = order != null ? new AdventureWorks.Enterprise.WebApp.Models.SalesOrder
+            {
+                SalesOrderId = order.SalesOrderId,
+                SalesOrderNumber = order.SalesOrderNumber,
+                CustomerId = order.CustomerId,
+                AccountNumber = order.AccountNumber,
+                OrderDate = order.OrderDate,
+                DueDate = order.DueDate,
+                ShipDate = order.ShipDate,
+                Status = order.Status,
+                Comment = order.Comment,
+                SubTotal = order.SubTotal,
+                TaxAmt = order.TaxAmt,
+                Freight = order.Freight,
+                TotalDue = order.TotalDue
+            } : null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading order {Id}: {ex.Message}");
+            order = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/orders");
+    }
+
+    private void EditOrder()
+    {
+        if (order == null) return;
+        
+        editOrder = new AdventureWorks.Enterprise.WebApp.Models.SalesOrder
+        {
+            SalesOrderId = order.SalesOrderId,
+            SalesOrderNumber = order.SalesOrderNumber,
+            CustomerId = order.CustomerId,
+            OrderDate = order.OrderDate,
+            DueDate = order.DueDate,
+            ShipDate = order.ShipDate,
+            Status = order.Status,
+            SubTotal = order.SubTotal,
+            TaxAmt = order.TaxAmt,
+            Freight = order.Freight,
+            TotalDue = order.TotalDue,
+            Comment = order.Comment,
+            PurchaseOrderNumber = order.PurchaseOrderNumber,
+            AccountNumber = order.AccountNumber
+        };
+        
+        editHasShipDate = order.ShipDate.HasValue;
+        editShipDateTemp = order.ShipDate ?? order.OrderDate;
+        
+        editErrorMessage = string.Empty;
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        if (!isEditing)
+        {
+            showEditModal = false;
+            editOrder = null;
+            editErrorMessage = string.Empty;
+        }
+    }
+
+    private async Task ConfirmEdit()
+    {
+        if (editOrder == null || isEditing) return;
+
+        if (HasDateValidationError())
+        {
+            editErrorMessage = "Por favor corrija los errores de validación de fechas antes de guardar.";
+            return;
+        }
+
+        editOrder.ShipDate = editHasShipDate ? editShipDateTemp : null;
+        var orderNumber = editOrder.SalesOrderNumber;
+
+        try
+        {
+            isEditing = true;
+            editErrorMessage = string.Empty;
+            StateHasChanged();
+
+            var success = await ApiService.UpdateOrderAsync(editOrder.SalesOrderId, editOrder);
+            
+            if (success)
+            {
+                showEditModal = false;
+                editOrder = null;
+                editErrorMessage = string.Empty;
+                
+                await NotificationService.ShowSuccessAsync($"Orden '{orderNumber}' actualizada exitosamente.");
+                
+                await OnParametersSetAsync();
+            }
+            else
+            {
+                editErrorMessage = "No se pudo actualizar la orden. Esto puede deberse a restricciones de la base de datos o problemas de conectividad. Verifique que solo esté modificando campos permitidos (fechas, estado y comentarios).";
+                await NotificationService.ShowErrorAsync("Error al actualizar la orden. La base de datos tiene restricciones especiales para órdenes de venta.");
+            }
+        }
+        catch (Exception ex)
+        {
+            editErrorMessage = $"Error inesperado: {ex.Message}";
+            await NotificationService.ShowErrorAsync("Ocurrió un error inesperado al actualizar la orden. Esto puede deberse a restricciones especiales de la base de datos AdventureWorks.");
+            System.Diagnostics.Debug.WriteLine($"Error updating order: {ex}");
+        }
+        finally
+        {
+            isEditing = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool HasDateValidationError()
+    {
+        if (editOrder == null) return false;
+        if (editOrder.OrderDate.Date > DateTime.Today) return true;
+        if (editOrder.DueDate.Date < editOrder.OrderDate.Date) return true;
+        if (editHasShipDate && editShipDateTemp.Date < editOrder.OrderDate.Date) return true;
+        return false;
+    }
+
+    private string GetStatusText(byte status)
+    {
+        return status switch
+        {
+            1 => "Pendiente",
+            2 => "Aprobada",
+            3 => "Enviada",
+            4 => "Cancelada",
+            5 => "Completada",
+            _ => "Desconocido"
+        };
+    }
+
+    private string GetStatusClass(byte status)
+    {
+        return status switch
+        {
+            1 => "badge-warning",
+            2 => "badge-info",
+            3 => "badge-primary",
+            4 => "badge-danger",
+            5 => "badge-success",
+            _ => "badge-secondary"
+        };
+    }
+
+    private string FormatCurrency(decimal amount)
+    {
+        return amount.ToString("C2");
+    }
+}
+
+<style>
+/* Asegura que el modal de edición cubra completamente el listado (encabezados sticky) */
+.modal-overlay { 
+    position: fixed; 
+    inset: 0; 
+    z-index: 10020; 
+    display: flex; 
+    align-items: flex-start; 
+    justify-content: center; 
+    padding: 2rem 1.25rem; 
+}
+
+.modal-backdrop { 
+    background: rgba(0,0,0,.45); 
+    backdrop-filter: blur(2px); 
+}
+
+.modal-content { 
+    background: #fff; 
+    border-radius: .75rem; 
+    box-shadow: 0 10px 25px -3px rgba(0,0,0,.25); 
+    width: min(900px, 100%); 
+    max-height: 90vh; 
+    overflow: auto; 
+    z-index: 10030;
+}
+
+.modal-header { 
+    position: sticky; 
+    top: 0; 
+    background: #fff; 
+    padding: 1rem 1.25rem; 
+    border-bottom: 1px solid #e2e8f0; 
+    z-index: 2; 
+}
+
+.modal-body { 
+    padding: 1rem 1.25rem 1.25rem; 
+}
+
+.modal-footer { 
+    padding: .85rem 1.25rem 1.25rem; 
+    border-top: 1px solid #e2e8f0; 
+    display: flex; 
+    justify-content: flex-end; 
+    gap: .5rem; 
+}
+
+/* Nueva estrategia de aislamiento visual para modal */
+.main-content-hidden {
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+.global-modal-wrapper {
+    position: fixed;
+    inset: 0;
+    z-index: 30000;
+}
+
+.global-modal-wrapper .modal-overlay {
+    z-index: 30001;
+}
+
+.global-modal-wrapper .modal-content {
+    z-index: 30002;
+}
+
+.order-edit-modal {
+    align-items: center;
+}
+
+/* Aseguramos que todos los elementos del modal tengan un alto z-index */
+.order-edit-modal *,
+.order-edit-modal *:before,
+.order-edit-modal *:after {
+    z-index: 30005;
+}
+
+/* Mejora para la página de detalles de la orden */
+.order-details-container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin: 0 auto;
+}
+</style>

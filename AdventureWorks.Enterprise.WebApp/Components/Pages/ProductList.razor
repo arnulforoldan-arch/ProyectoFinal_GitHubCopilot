@@ -1,0 +1,160 @@
+@* Listado de inventario con indicadores de estado y exportaciones *@
+@page "/productlist"
+@rendermode InteractiveServer
+@using AdventureWorks.Enterprise.WebApp.Components.Shared
+@using AdventureWorks.Enterprise.WebApp.Models
+@using Microsoft.JSInterop
+
+<PageTitle>Inventario de Productos - Sistema de Gestión Empresarial</PageTitle>
+<link href="css/CorporateTheme.css" rel="stylesheet" />
+
+<!-- Encabezado -->
+<div class="page-header">
+    <h1><i class="fas fa-boxes page-icon"></i> Inventario de Productos</h1>
+    <p>Consulta y seguimiento del nivel de inventario por producto y ubicación</p>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar-section">
+    <div class="search-bar">
+        <div class="search-input-group">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged" placeholder="Buscar por nombre, número, color, ProductoId, Ubicación, Estante o Bin..." class="form-control search-input" />
+        </div>
+    </div>
+    <div class="toolbar-actions">
+        <select @bind="pageSize" @bind:after="OnPageSizeChangedAsync" class="form-control page-size-select">
+            <option value="5">5 por página</option>
+            <option value="10">10 por página</option>
+            <option value="20">20 por página</option>
+            <option value="50">50 por página</option>
+        </select>
+        <button class="btn-gradient btn-secondary" @onclick="RefreshData"><i class="fas fa-sync-alt"></i> Actualizar</button>
+        <div class="export-actions">
+            <button class="btn-gradient btn-outline" title="Exportar CSV" @onclick="ExportCsv"><i class="fas fa-file-csv"></i> CSV</button>
+            <button class="btn-gradient btn-outline" title="Exportar Excel" @onclick="ExportExcel"><i class="fas fa-file-excel"></i> Excel</button>
+            <button class="btn-gradient btn-outline" title="Imprimir" @onclick="PrintReport"><i class="fas fa-print"></i> Imprimir</button>
+        </div>
+    </div>
+</div>
+
+<!-- Resumen estadístico -->
+<div class="stats-summary">
+    <div class="stat-card"><div class="stat-icon"><i class="fas fa-box"></i></div><div class="stat-content"><div class="stat-number">@distinctProducts</div><div class="stat-label">Productos con Inventario</div></div></div>
+    <div class="stat-card"><div class="stat-icon active"><i class="fas fa-filter"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.TotalCount ?? 0)</div><div class="stat-label">Registros Filtrados</div></div></div>
+    <div class="stat-card"><div class="stat-icon success"><i class="fas fa-layer-group"></i></div><div class="stat-content"><div class="stat-number">@totalQuantity</div><div class="stat-label">Cantidad Total</div></div></div>
+    <div class="stat-card"><div class="stat-icon secondary"><i class="fas fa-file-alt"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.Items.Count ?? 0)</div><div class="stat-label">En Esta Página</div></div></div>
+</div>
+
+@* Estados *@
+@if (isLoading)
+{
+    <div class="loading-section"><div class="loading-spinner"></div><p>Cargando inventario de productos...</p></div>
+}
+else if (pagedResult == null || pagedResult.Items.Count == 0)
+{
+    <div class="empty-state">
+        <i class="fas fa-boxes empty-icon"></i>
+        <h3>No se encontraron registros de inventario</h3>
+        <p>@(string.IsNullOrEmpty(searchTerm) ? "No hay inventario registrado." : "No se encontraron registros que coincidan con su búsqueda.")</p>
+        @if (!string.IsNullOrEmpty(searchTerm)) { <button class="btn-gradient btn-outline" @onclick="ClearFilters"><i class="fas fa-times"></i> Limpiar Filtros</button> }
+    </div>
+}
+else
+{
+    <!-- Información de paginación y ordenamiento -->
+    <div class="pagination-info">
+        <div class="page-info"><span>Mostrando @pagedResult.StartIndex - @pagedResult.EndIndex de @pagedResult.TotalCount registros</span></div>
+        <div class="sort-options">
+            <label>Ordenar por:</label>
+            <select @bind="sortBy" @bind:after="OnSortChangedAsync" class="form-control sort-select">
+                <option value="ProductId">Producto ID</option>
+                <option value="LocationId">Ubicación ID</option>
+                <option value="Quantity">Cantidad</option>
+                <option value="Shelf">Estante</option>
+                <option value="Bin">Bin</option>
+                <option value="Status">Estado</option>
+                <option value="Level">Nivel</option>
+            </select>
+            <button class="btn-sort @(sortDirection == "asc" ? "active" : "")" @onclick="ToggleSortDirection" title="@(sortDirection == "asc" ? "Orden Ascendente" : "Orden Descendente")"><i class="fas @(sortDirection == "asc" ? "fa-sort-amount-up" : "fa-sort-amount-down")"></i></button>
+        </div>
+    </div>
+    <!-- Leyenda de estados -->
+    <div class="report-legend">
+        <span><span class="status-dot status-completed"></span> Adecuado</span>
+        <span><span class="status-dot status-pending"></span> Bajo</span>
+        <span><span class="status-dot status-cancelled"></span> Sin stock</span>
+    </div>
+    <!-- Tabla de reporte -->
+    <div class="report-container">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Estado</th><th>Producto</th><th>Número</th><th>Color</th><th>Seguridad</th><th>Inventario</th><th>Nivel</th><th>Ubicación</th><th>Estante</th><th>Bin</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in pagedResult.Items)
+            {
+                var hasProduct = productsById.TryGetValue(item.ProductId, out var prod);
+                var statusClass = GetQuantityStatusClass(item);
+                var statusText = GetQuantityStatusText(item);
+                var percent = GetLevelPercent(item);
+                <tr class="@statusClass">
+                    <td><span class="status-dot @statusClass" title="@statusText"></span><span class="status-text">@statusText</span></td>
+                    <td>@(hasProduct ? prod!.Name : $"Producto ID: {item.ProductId}")</td>
+                    <td>@(hasProduct ? prod!.ProductNumber : "-")</td>
+                    <td>@(hasProduct ? (string.IsNullOrWhiteSpace(prod!.Color) ? "-" : prod!.Color) : "-")</td>
+                    <td>@(hasProduct ? prod!.SafetyStockLevel : 0)</td>
+                    <td>@item.Quantity</td>
+                    <td>
+                        <div class="level-bar"><div class="level-fill @statusClass" style="width:@percent%"></div></div>
+                        <small class="level-caption">@percent%</small>
+                    </td>
+                    <td>@item.LocationId</td>
+                    <td>@item.Shelf</td>
+                    <td>@item.Bin</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <!-- Controles de paginación -->
+    <div class="pagination-controls">
+        <div class="pagination-nav">
+            <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(1))" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-double-left"></i> Primera</button>
+            <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(currentPage - 1))" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-left"></i> Anterior</button>
+            <div class="page-numbers">@foreach (var pageNum in GetPageNumbers()) { <button class="btn-page-number @(pageNum == currentPage ? "active" : "")" @onclick="@(() => NavigateToPageAsync(pageNum))">@pageNum</button> }</div>
+            <button class="btn-page @(!CanGoToNextPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(currentPage + 1))" disabled="@(!CanGoToNextPage())">Siguiente <i class="fas fa-angle-right"></i></button>
+            <button class="btn-page @(!CanGoToNextPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(pagedResult?.TotalPages ?? 1))" disabled="@(!CanGoToNextPage())">Última <i class="fas fa-angle-double-right"></i></button>
+        </div>
+        <div class="pagination-summary"><span>Página @currentPage de @(pagedResult?.TotalPages ?? 1)</span></div>
+    </div>
+}
+
+<style>
+.report-legend { display:flex; gap:1rem; margin:.5rem 0 1rem; color:var(--text-secondary,#666); }
+.status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.status-dot.status-completed { background:#22c55e; }
+.status-dot.status-pending { background:#f59e0b; }
+.status-dot.status-cancelled { background:#ef4444; }
+.status-text { margin-left:6px; font-weight:600; }
+.report-container { width:100%; overflow-x:auto; }
+.report-table { width:100%; border-collapse:separate; border-spacing:0 8px; }
+.report-table thead th { text-align:left; font-weight:700; padding:12px 14px; color:var(--text-secondary,#6b7280); border-bottom:2px solid rgba(0,0,0,.08); }
+.report-table tbody tr { background:rgba(255,255,255,.7); box-shadow:0 1px 3px rgba(0,0,0,.06); transition:background .25s ease; }
+.report-table tbody td { padding:12px 14px; border-top:1px solid rgba(0,0,0,.04); }
+.report-table tbody tr.status-cancelled { background:rgba(239,68,68,.10); }
+.report-table tbody tr.status-pending { background:rgba(245,158,11,.12); }
+.report-table tbody tr.status-completed { background:rgba(34,197,94,.12); }
+.report-table tbody tr:hover { background:rgba(59,130,246,.10); }
+.level-bar { position:relative; height:8px; background:rgba(0,0,0,.08); border-radius:999px; overflow:hidden; min-width:120px; }
+.level-fill { height:100%; border-radius:999px; transition:width .4s ease; }
+.level-fill.status-cancelled { background:linear-gradient(90deg,#ef4444,#dc2626); }
+.level-fill.status-pending { background:linear-gradient(90deg,#f59e0b,#d97706); }
+.level-fill.status-completed { background:linear-gradient(90deg,#22c55e,#16a34a); }
+.level-caption { color:var(--text-secondary,#6b7280); margin-left:6px; font-size:.75rem; font-weight:600; }
+@@media (max-width: 900px){ .report-table thead { display:none; } .report-table tbody tr { display:grid; grid-template-columns:repeat(2,1fr); row-gap:4px; } .report-table tbody td { padding:6px 10px; font-size:.78rem; } .report-table tbody tr.status-cancelled, .report-table tbody tr.status-pending, .report-table tbody tr.status-completed { background:rgba(255,255,255,.95); } }
+</style>
+
+@code { /* Lógica en code-behind ProductList.razor.cs */ }

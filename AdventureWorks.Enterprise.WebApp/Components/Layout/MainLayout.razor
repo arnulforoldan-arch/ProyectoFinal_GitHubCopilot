@@ -1,0 +1,19 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <article class="content px-4">
+            @Body
+        </article>
+
+        <footer>
+            <div class="container">
+                <p>&copy; @DateTime.Now.Year - AdventureWorks Enterprise</p>
+            </div>
+        </footer>
+    </main>
+</div>

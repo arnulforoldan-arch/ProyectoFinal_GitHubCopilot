@@ -1,0 +1,177 @@
+@* Página de detalles de empleado con panel informativo y edición modal *@
+@page "/Employees/{id:int}"
+@rendermode InteractiveServer
+@inject AdventureWorks.Enterprise.WebApp.Services.ApiService ApiService
+@inject AdventureWorks.Enterprise.WebApp.Services.NotificationService NotificationService
+@inject NavigationManager Navigation
+
+<PageTitle>Detalles del Empleado - Sistema de Gestión Empresarial</PageTitle>
+<link href="css/CorporateTheme.css" rel="stylesheet" />
+
+<!-- Encabezado y acción volver -->
+<div class="page-header">
+    <div class="header-content">
+        <button class="btn-gradient btn-back" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver</button>
+        <h1><i class="fas fa-user"></i> Detalles del Empleado</h1>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-section"><div class="loading-spinner"></div><p>Cargando detalles del empleado...</p></div>
+}
+else if (employee == null)
+{
+    <div class="empty-state">
+        <i class="fas fa-user-times empty-icon"></i>
+        <h3>Empleado no encontrado</h3>
+        <p>No se pudo encontrar un empleado con el ID @Id.</p>
+        <button class="btn-gradient" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver a la lista</button>
+    </div>
+}
+else
+{
+    <div class="order-details-container">
+        <div class="order-header-card">
+            <div class="order-main-info">
+                <h2>@FormatEmployeeName(employee.LoginId)</h2>
+                <p>ID: @employee.EmployeeId</p>
+                <span class="badge @(employee.CurrentFlag ? "badge-success" : "badge-danger")">@(employee.CurrentFlag ? "Activo" : "Inactivo")</span>
+            </div>
+            <div class="order-total"><div class="total-amount">@employee.JobTitle</div></div>
+        </div>
+
+        <div class="details-grid">
+            <div class="details-section">
+                <h3><i class="fas fa-id-card"></i> Información Personal</h3>
+                <div class="detail-row"><span class="detail-label">Número de Identificación Nacional:</span><span class="detail-value">@(!string.IsNullOrEmpty(employee.NationalIdNumber) ? employee.NationalIdNumber : "No especificado")</span></div>
+                <div class="detail-row"><span class="detail-label">Login ID:</span><span class="detail-value">@employee.LoginId</span></div>
+                <div class="detail-row"><span class="detail-label">Fecha de Nacimiento:</span><span class="detail-value">@employee.BirthDate.ToString("dd/MM/yyyy")</span></div>
+                <div class="detail-row"><span class="detail-label">Edad:</span><span class="detail-value">@CalculateAge(employee.BirthDate) años</span></div>
+                <div class="detail-row"><span class="detail-label">Estado Civil:</span><span class="detail-value">@FormatMaritalStatus(employee.MaritalStatus)</span></div>
+                <div class="detail-row"><span class="detail-label">Género:</span><span class="detail-value">@FormatGender(employee.Gender)</span></div>
+            </div>
+            <div class="details-section">
+                <h3><i class="fas fa-briefcase"></i> Información Laboral</h3>
+                <div class="detail-row"><span class="detail-label">Cargo:</span><span class="detail-value">@employee.JobTitle</span></div>
+                <div class="detail-row"><span class="detail-label">Fecha de Contratación:</span><span class="detail-value">@employee.HireDate.ToString("dd/MM/yyyy")</span></div>
+                <div class="detail-row"><span class="detail-label">Años en la Empresa:</span><span class="detail-value">@CalculateYearsOfService(employee.HireDate) años</span></div>
+                <div class="detail-row"><span class="detail-label">Tipo de Empleado:</span><span class="detail-value">@(employee.SalariedFlag ? "Empleado Asalariado" : "Empleado por Horas")</span></div>
+                <div class="detail-row"><span class="detail-label">Estado:</span><span class="detail-value">@(employee.CurrentFlag ? "Empleado Activo" : "Empleado Inactivo")</span></div>
+            </div>
+            <div class="details-section">
+                <h3><i class="fas fa-calendar-alt"></i> Vacaciones y Permisos</h3>
+                <div class="detail-row"><span class="detail-label">Horas de Vacaciones:</span><span class="detail-value">@employee.VacationHours horas</span></div>
+                <div class="detail-row"><span class="detail-label">Días de Vacaciones:</span><span class="detail-value">@Math.Round(employee.VacationHours / 8.0, 1) días</span></div>
+                <div class="detail-row"><span class="detail-label">Horas por Enfermedad:</span><span class="detail-value">@employee.SickLeaveHours horas</span></div>
+                <div class="detail-row"><span class="detail-label">Días por Enfermedad:</span><span class="detail-value">@Math.Round(employee.SickLeaveHours / 8.0, 1) días</span></div>
+                <div class="detail-row total-row"><span class="detail-label">Total Días Disponibles:</span><span class="detail-value">@Math.Round((employee.VacationHours + employee.SickLeaveHours) / 8.0, 1) días</span></div>
+            </div>
+        </div>
+        <div class="actions-section">
+            <button class="btn-gradient" @onclick="EditEmployee"><i class="fas fa-edit"></i> Editar</button>
+            <button class="btn-gradient btn-outline" @onclick="GoBack"><i class="fas fa-arrow-left"></i> Volver</button>
+        </div>
+    </div>
+}
+
+<!-- Modal de edición -->
+@if (showEditModal && editEmployee != null)
+{
+    <div class="modal-overlay" @onclick="CloseEditModal">
+        <div class="modal-content modal-edit" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> Editar Empleado: @FormatEmployeeName(editEmployee.LoginId)</h3>
+                <button class="modal-close" @onclick="CloseEditModal" disabled="@isEditing"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row"><div class="form-group"><label>ID Nacional:</label><input type="text" @bind="editEmployee.NationalIdNumber" class="form-control" disabled="@isEditing" /></div><div class="form-group"><label>Login ID:</label><input type="text" @bind="editEmployee.LoginId" class="form-control" disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Cargo:</label><input type="text" @bind="editEmployee.JobTitle" class="form-control" disabled="@isEditing" required /></div><div class="form-group"><label>Fecha de Nacimiento:</label><CustomDateInput Value="@editEmployee.BirthDate" ValueChanged="OnBirthDateChanged" Disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Estado Civil:</label><select @bind="editEmployee.MaritalStatus" class="form-control" disabled="@isEditing"><option value="S">Soltero/a</option><option value="M">Casado/a</option><option value="D">Divorciado/a</option><option value="W">Viudo/a</option></select></div><div class="form-group"><label>Género:</label><select @bind="editEmployee.Gender" class="form-control" disabled="@isEditing"><option value="M">Masculino</option><option value="F">Femenino</option></select></div></div>
+                    <div class="form-row"><div class="form-group"><label>Fecha de Contratación:</label><CustomDateInput Value="@editEmployee.HireDate" ValueChanged="OnHireDateChanged" Disabled="@isEditing" /></div><div class="form-group"><label>Tipo de Empleado:</label><select @bind="editEmployeeSalariedFlagString" class="form-control" disabled="@isEditing"><option value="true">Asalariado</option><option value="false">Por Horas</option></select></div></div>
+                    <div class="form-row"><div class="form-group"><label>Horas de Vacaciones:</label><input type="number" @bind="editEmployee.VacationHours" class="form-control" min="0" disabled="@isEditing" /></div><div class="form-group"><label>Horas por Enfermedad:</label><input type="number" @bind="editEmployee.SickLeaveHours" class="form-control" min="0" disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Estado:</label><div class="form-check"><input type="checkbox" class="form-check-input" id="chkEstadoDet" @bind="editEmployee.CurrentFlag" disabled="@isEditing" /><label class="form-check-label" for="chkEstadoDet">Activo</label></div></div></div>
+                </form>
+                @if (!string.IsNullOrEmpty(editErrorMessage)) { <div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>@editErrorMessage</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gradient btn-outline" @onclick="CloseEditModal" disabled="@isEditing">Cancelar</button>
+                <button class="btn-gradient" @onclick="ConfirmEdit" disabled="@isEditing">@if (isEditing){<i class="fas fa-spinner fa-spin"></i><span>Guardando...</span>}else{<i class="fas fa-save"></i><span>Guardar Cambios</span>}</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private AdventureWorks.Enterprise.WebApp.Models.Employee? employee;
+    private bool isLoading = true;
+    private bool showEditModal;
+    private bool isEditing;
+    private string editErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.Employee? editEmployee;
+
+    private string editEmployeeSalariedFlagString
+    { get => editEmployee?.SalariedFlag.ToString().ToLowerInvariant() ?? string.Empty; set { if (editEmployee != null && bool.TryParse(value, out var r)) editEmployee.SalariedFlag = r; } }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true; StateHasChanged();
+        try
+        {
+            employee = await ApiService.GetEmployeeAsync(Id);
+            if (employee != null) editEmployee = CloneEmployee(employee);
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error loading employee {Id}: {ex.Message}"); employee = null; }
+        finally { isLoading = false; StateHasChanged(); }
+    }
+
+    private AdventureWorks.Enterprise.WebApp.Models.Employee CloneEmployee(AdventureWorks.Enterprise.WebApp.Models.Employee src) => new()
+    {
+        EmployeeId = src.EmployeeId,
+        NationalIdNumber = src.NationalIdNumber,
+        LoginId = src.LoginId,
+        JobTitle = src.JobTitle,
+        BirthDate = src.BirthDate,
+        MaritalStatus = src.MaritalStatus,
+        Gender = src.Gender,
+        HireDate = src.HireDate,
+        SalariedFlag = src.SalariedFlag,
+        VacationHours = src.VacationHours,
+        SickLeaveHours = src.SickLeaveHours,
+        CurrentFlag = src.CurrentFlag
+    };
+
+    private void GoBack() => Navigation.NavigateTo("/Employees");
+    private void EditEmployee() { if (employee == null) return; editEmployee = CloneEmployee(employee); editErrorMessage = string.Empty; showEditModal = true; }
+    private void CloseEditModal() { if (isEditing) return; showEditModal = false; editEmployee = null; editErrorMessage = string.Empty; }
+
+    private async Task ConfirmEdit()
+    {
+        if (editEmployee == null || isEditing) return; var employeeName = FormatEmployeeName(editEmployee.LoginId);
+        try
+        {
+            isEditing = true; editErrorMessage = string.Empty; StateHasChanged(); var success = await ApiService.UpdateEmployeeAsync(editEmployee.EmployeeId, editEmployee);
+            if (success)
+            { await NotificationService.ShowSuccessAsync($"Empleado '{employeeName}' actualizado exitosamente."); showEditModal = false; employee = CloneEmployee(editEmployee); editEmployee = null; }
+            else { editErrorMessage = "No se pudo actualizar el empleado."; await NotificationService.ShowErrorAsync("Error al actualizar el empleado."); }
+        }
+        catch (Exception ex) { editErrorMessage = $"Error inesperado: {ex.Message}"; await NotificationService.ShowErrorAsync("Error al actualizar el empleado."); }
+        finally { isEditing = false; StateHasChanged(); }
+    }
+
+    private string FormatEmployeeName(string? loginId)
+    {
+        if (string.IsNullOrWhiteSpace(loginId)) return "Sin nombre"; var clean = loginId.Replace("adventure-works\\", ""); while (clean.Length > 0 && char.IsDigit(clean[^1])) clean = clean[..^1]; if (clean.Length == 0) return loginId; if (clean.Length == 1) return clean.ToUpperInvariant(); return char.ToUpperInvariant(clean[0]) + clean[1..].ToLowerInvariant();
+    }
+    private string FormatMaritalStatus(string? code) => code?.ToUpperInvariant() switch { "S" => "Soltero/a", "M" => "Casado/a", "D" => "Divorciado/a", "W" => "Viudo/a", _ => "No especificado" };
+    private string FormatGender(string? code) => code?.ToUpperInvariant() switch { "M" => "Masculino", "F" => "Femenino", _ => "No especificado" };
+    private int CalculateAge(DateTime birth) { if (birth == default) return 0; var today = DateTime.Today; var age = today.Year - birth.Year; if (birth.Date > today.AddYears(-age)) age--; return age; }
+    private int CalculateYearsOfService(DateTime hire) { if (hire == default) return 0; var today = DateTime.Today; var yrs = today.Year - hire.Year; if (hire.Date > today.AddYears(-yrs)) yrs--; return Math.Max(0, yrs); }
+
+    // Handlers for CustomDateInput to avoid bind-Value usage
+    private Task OnBirthDateChanged(DateTime d) { if (editEmployee != null) editEmployee.BirthDate = d; return Task.CompletedTask; }
+    private Task OnHireDateChanged(DateTime d) { if (editEmployee != null) editEmployee.HireDate = d; return Task.CompletedTask; }
+}

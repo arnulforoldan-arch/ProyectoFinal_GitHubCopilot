@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdventureWorks.Enterprise.Api", "AdventureWorks.Enterprise.Api\AdventureWorks.Enterprise.Api.csproj", "{AD7606D3-4DD1-4E51-883B-34A2B771EF11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdventureWorks.Enterprise.WebApp", "AdventureWorks.Enterprise.WebApp\AdventureWorks.Enterprise.WebApp.csproj", "{C508CCD4-CE6B-487A-ABE4-0B50072D7493}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdventureWorks.Enterprise.Api.Tests", "AdventureWorks.Enterprise.Api.Tests\AdventureWorks.Enterprise.Api.Tests.csproj", "{7A5B8EE0-18A9-4CA7-B1D3-A8A0152A634B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\..\Users\arnulforoldan\Downloads\Proyecto Final GitHub Copilot\copilot-instructions.md = ..\..\..\Users\arnulforoldan\Downloads\Proyecto Final GitHub Copilot\copilot-instructions.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AD7606D3-4DD1-4E51-883B-34A2B771EF11}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD7606D3-4DD1-4E51-883B-34A2B771EF11}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD7606D3-4DD1-4E51-883B-34A2B771EF11}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD7606D3-4DD1-4E51-883B-34A2B771EF11}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C508CCD4-CE6B-487A-ABE4-0B50072D7493}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C508CCD4-CE6B-487A-ABE4-0B50072D7493}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C508CCD4-CE6B-487A-ABE4-0B50072D7493}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C508CCD4-CE6B-487A-ABE4-0B50072D7493}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A5B8EE0-18A9-4CA7-B1D3-A8A0152A634B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A5B8EE0-18A9-4CA7-B1D3-A8A0152A634B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A5B8EE0-18A9-4CA7-B1D3-A8A0152A634B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A5B8EE0-18A9-4CA7-B1D3-A8A0152A634B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E39A71EA-EE19-418C-9C49-304B5AC33047}
+	EndGlobalSection
+EndGlobal

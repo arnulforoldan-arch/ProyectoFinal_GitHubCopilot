@@ -1,0 +1,1207 @@
+@* Listado maestro-detalle de órdenes de venta con filtros, paginación y CRUD limitado *@
+@page "/orders"
+@rendermode InteractiveServer
+@using AdventureWorks.Enterprise.WebApp.Components.Shared
+@inject AdventureWorks.Enterprise.WebApp.Services.ApiService ApiService
+@inject AdventureWorks.Enterprise.WebApp.Services.NotificationService NotificationService
+@inject NavigationManager Navigation
+
+<PageTitle>Órdenes de Venta - Sistema de Gestión Empresarial</PageTitle>
+<link href="css/CorporateTheme.css" rel="stylesheet" />
+
+<!-- Encabezado principal -->
+<div class="page-header">
+    <h1><i class="fas fa-shopping-cart page-icon"></i> Órdenes de Venta</h1>
+    <p>Gestione y supervise todas las órdenes de venta de su empresa</p>
+</div>
+
+<!-- Barra de herramientas: búsqueda, filtros y acciones -->
+<div class="toolbar-section">
+    <div class="search-bar">
+        <div class="search-input-group">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged" placeholder="Buscar órdenes..." class="form-control search-input" />
+        </div>
+    </div>
+    <div class="toolbar-actions">
+        <select @bind="statusFilter" @bind:after="OnStatusFilterChanged" class="form-control status-select">
+            <option value="">Todos los Estados</option>
+            <option value="1">Pendiente</option>
+            <option value="2">Aprobada</option>
+            <option value="3">Enviada</option>
+            <option value="4">Cancelada</option>
+            <option value="5">Completada</option>
+        </select>
+        <select @bind="pageSize" @bind:after="OnPageSizeChangedAsync" class="form-control page-size-select">
+            <option value="5">5 por página</option>
+            <option value="10">10 por página</option>
+            <option value="20">20 por página</option>
+            <option value="50">50 por página</option>
+        </select>
+        <button class="btn-gradient" @onclick="ShowCreateOrderModal"><i class="fas fa-plus"></i> Nueva Orden</button>
+        <button class="btn-gradient btn-secondary" @onclick="RefreshData"><i class="fas fa-sync-alt"></i> Actualizar</button>
+    </div>
+</div>
+
+<!-- Resumen estadístico -->
+<div class="stats-summary">
+    <div class="stat-card"><div class="stat-icon"><i class="fas fa-shopping-cart"></i></div><div class="stat-content"><div class="stat-number">@totalOrders</div><div class="stat-label">Total Órdenes</div></div></div>
+    <div class="stat-card"><div class="stat-icon active"><i class="fas fa-filter"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.TotalCount ?? 0)</div><div class="stat-label">Órdenes Filtradas</div></div></div>
+    <div class="stat-card"><div class="stat-icon success"><i class="fas fa-dollar-sign"></i></div><div class="stat-content"><div class="stat-number">@FormatCurrency(totalValue)</div><div class="stat-label">Valor Total</div></div></div>
+    <div class="stat-card"><div class="stat-icon secondary"><i class="fas fa-file-alt"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.Items.Count ?? 0)</div><div class="stat-label">En Esta Página</div></div></div>
+</div>
+
+@* Estados de carga / vacío *@
+@if (isLoading)
+{
+    <div class="loading-section"><div class="loading-spinner"></div><p>Cargando órdenes de venta...</p></div>
+}
+else if (pagedResult == null || pagedResult.Items.Count == 0)
+{
+    <div class="empty-state">
+        <i class="fas fa-shopping-cart empty-icon"></i>
+        <h3>No se encontraron órdenes</h3>
+        <p>@(string.IsNullOrEmpty(searchTerm) ? "No hay órdenes de venta registradas." : "No se encontraron órdenes que coincidan con su búsqueda.")</p>
+        @if (!string.IsNullOrEmpty(searchTerm) || !string.IsNullOrEmpty(statusFilter))
+        {
+            <button class="btn-gradient btn-outline" @onclick="ClearFilters"><i class="fas fa-times"></i> Limpiar Filtros</button>
+        }
+    </div>
+}
+else
+{
+    <!-- Layout maestro-detalle -->
+    <div class="master-detail-layout">
+        <div class="master-panel">
+            <!-- Información de paginación y ordenamiento -->
+            <div class="pagination-info">
+                <div class="page-info"><span>Mostrando @pagedResult.StartIndex - @pagedResult.EndIndex de @pagedResult.TotalCount órdenes</span></div>
+                <div class="sort-options">
+                    <label>Ordenar por:</label>
+                    <select @bind="sortBy" @bind:after="OnSortChangedAsync" class="form-control sort-select">
+                        <option value="OrderDate">Fecha de Orden</option>
+                        <option value="SalesOrderId">ID Orden</option>
+                        <option value="SalesOrderNumber">Número de Orden</option>
+                        <option value="CustomerId">Cliente ID</option>
+                        <option value="TotalDue">Total</option>
+                        <option value="Status">Estado</option>
+                        <option value="DueDate">Fecha Vencimiento</option>
+                    </select>
+                    <button class="btn-sort @(sortDirection == "asc" ? "active" : "")" @onclick="ToggleSortDirection" title="@(sortDirection == "asc" ? "Orden Ascendente" : "Orden Descendente")">
+                        <i class="fas @(sortDirection == "asc" ? "fa-sort-amount-up" : "fa-sort-amount-down")"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- Cabecera fija de tabla -->
+            <div class="orders-header-grid">
+                <div class="header-item" style="width: 20%;">Número</div>
+                <div class="header-item" style="width: 10%;">ID</div>
+                <div class="header-item" style="width: 10%;">Cliente</div>
+                <div class="header-item" style="width: 15%;">Fecha Orden</div>
+                <div class="header-item" style="width: 15%;">Vencimiento</div>
+                <div class="header-item" style="width: 15%;">Total</div>
+                <div class="header-item" style="width: 15%;">Estado</div>
+                <div class="header-item" style="width: 10%;">Acción</div>
+            </div>
+            <!-- Tabla de órdenes -->
+            <div class="list-scroll">
+                <table class="orders-table">
+                    <colgroup><col style="width:20%" /><col style="width:10%" /><col style="width:10%" /><col style="width:15%" /><col style="width:15%" /><col style="width:15%" /><col style="width:15%" /><col style="width:10%" /></colgroup>
+                    <tbody>
+                        @foreach (var order in pagedResult.Items)
+                        {
+                            var selected = selectedOrderId == order.SalesOrderId;
+                            <tr class="@(selected ? "selected-row" : null)" @onclick="() => SelectOrder(order.SalesOrderId)">
+                                <td>@order.SalesOrderNumber</td>
+                                <td>@order.SalesOrderId</td>
+                                <td>@order.CustomerId</td>
+                                <td>@order.OrderDate.ToString("dd/MM/yyyy")</td>
+                                <td>@order.DueDate.ToString("dd/MM/yyyy")</td>
+                                <td>@FormatCurrency(order.TotalDue)</td>
+                                <td><span class="status-badge @(GetStatusClass(order.Status))">@GetStatusText(order.Status)</span></td>
+                                <td class="actions" @onclick:stopPropagation="true"><button class="btn-action delete" title="Eliminar" @onclick="() => DeleteOrder(order)"><i class="fas fa-trash"></i></button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <!-- Controles de paginación -->
+            <div class="pagination-controls">
+                <div class="pagination-nav">
+                    <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(1))" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-double-left"></i> Primera</button>
+                    <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(currentPage - 1))" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-left"></i> Anterior</button>
+                    <div class="page-numbers">
+                        @foreach (var pageNum in GetPageNumbers())
+                        {
+                            <button class="btn-page-number @(pageNum == currentPage ? "active" : "")" @onclick="@(() => NavigateToPageAsync(pageNum))">@pageNum</button>
+                        }
+                    </div>
+                    <button class="btn-page @(!CanGoToNextPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(currentPage + 1))" disabled="@(!CanGoToNextPage())">Siguiente <i class="fas fa-angle-right"></i></button>
+                    <button class="btn-page @(!CanGoToNextPage() ? "disabled" : "")" @onclick="@(() => NavigateToPageAsync(pagedResult?.TotalPages ?? 1))" disabled="@(!CanGoToNextPage())">Última <i class="fas fa-angle-double-right"></i></button>
+                </div>
+                <div class="pagination-summary"><span>Página @currentPage de @(pagedResult?.TotalPages ?? 1)</span></div>
+            </div>
+        </div>
+        <!-- Panel detalle embebido -->
+        <div class="detail-panel @(selectedOrderId.HasValue ? "open" : "")">
+            @if (selectedOrderId is null)
+            {
+                <div class="empty-detail"><i class="fas fa-eye"></i><p>Seleccione una orden para ver sus detalles aquí.</p></div>
+            }
+            else
+            {
+                <div class="detail-header">
+                    <h3>Detalle de Orden</h3>
+                    <button class="btn-close" @onclick="ClearSelection" title="Cerrar"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="detail-content">
+                    <AdventureWorks.Enterprise.WebApp.Components.Pages.OrderDetails Id="@selectedOrderId.Value" Embedded="true" />
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Modal de confirmación para eliminar -->
+@if (showDeleteModal)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Confirmar Eliminación
+                </h3>
+                <button class="modal-close" @onclick="CloseDeleteModal" disabled="@isDeleting">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro de que desea eliminar la orden <strong>@selectedOrder?.SalesOrderNumber</strong>?</p>
+                <p class="warning-text">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Esta acción no se puede deshacer y eliminará permanentemente toda la información de la orden de venta.
+                </p>
+                @if (!string.IsNullOrEmpty(deleteErrorMessage))
+                {
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-circle"></i>
+                        @deleteErrorMessage
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gradient btn-outline" @onclick="CloseDeleteModal" disabled="@isDeleting">
+                    Cancelar
+                </button>
+                <button class="btn-gradient btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">
+                    @if (isDeleting)
+                    {
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Eliminando...</span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-trash"></i>
+                        <span>Eliminar</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showEditModal && editOrder != null)
+{
+    <div class="modal-overlay modal-backdrop" @onclick="CloseEditModal">
+        <div class="modal-content modal-edit" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-edit"></i>
+                    Editar Orden de Venta - @editOrder.SalesOrderNumber
+                </h3>
+                <button class="modal-close" @onclick="CloseEditModal" disabled="@isEditing">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(editErrorMessage))
+                {
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-circle"></i>
+                        @editErrorMessage
+                    </div>
+                }
+                
+                <div class="form-info">
+                    <p><i class="fas fa-info-circle"></i> <strong>Campos editables:</strong> Solo se pueden modificar las fechas, estado y comentarios de la orden.</p>
+                </div>
+                
+                <div class="form-section">
+                    <h4>Información de la Orden (Solo lectura)</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>ID de Orden:</label>
+                            <input type="text" value="@editOrder.SalesOrderId" class="form-control" disabled />
+                        </div>
+                        <div class="form-group">
+                            <label>Número de Orden:</label>
+                            <input type="text" value="@editOrder.SalesOrderNumber" class="form-control" disabled />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Cliente ID:</label>
+                            <input type="text" value="@editOrder.CustomerId" class="form-control" disabled />
+                        </div>
+                        <div class="form-group">
+                            <label>Total:</label>
+                            <input type="text" value="@editOrder.TotalDue.ToString("C2")" class="form-control" disabled />
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h4>Campos Editables</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="orderDate">Fecha de Orden: <span class="required">*</span></label>
+                            <CustomDateInput @bind-Value="editOrder.OrderDate"
+                                             Disabled="@isEditing"
+                                             Max="@DateTime.Today"
+                                             IsInvalid="@HasDateValidationError()"
+                                             CssClass="form-control" />
+                        </div>
+                        <div class="form-group">
+                            <label for="dueDate">Fecha Vencimiento: <span class="required">*</span></label>
+                            <CustomDateInput @bind-Value="editOrder.DueDate"
+                                             Disabled="@isEditing"
+                                             Min="@editOrder.OrderDate"
+                                             IsInvalid="@HasDateValidationError()"
+                                             CssClass="form-control" />
+                        </div>
+                    
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="shipDate">Fecha de Envío:</label>
+                                <div class="form-check" style="margin-bottom: 6px;">
+                                    <input type="checkbox" class="form-check-input" id="chkEditHasShip" @bind="editHasShipDate" />
+                                    <label class="form-check-label" for="chkEditHasShip">Incluir fecha de envío</label>
+                                </div>
+                                <CustomDateInput @bind-Value="editShipDateTemp"
+                                                 Disabled="@(isEditing || !editHasShipDate)"
+                                                 Min="@editOrder.OrderDate"
+                                                 CssClass="form-control" />
+                                <small class="form-text">Opcional - Solo si la orden ya fue enviada</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="status">Estado de la Orden: <span class="required">*</span></label>
+                                <select id="status" @bind="editOrder.Status" class="form-control">
+                                    <option value="1">Pendiente</option>
+                                    <option value="2">Aprobada</option>
+                                    <option value="3">Enviada</option>
+                                    <option value="4">Cancelada</option>
+                                    <option value="5">Completada</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="comment">Comentarios:</label>
+                            <textarea id="comment" @bind="editOrder.Comment" 
+                                      class="form-control" rows="3" 
+                                      maxlength="128" placeholder="Comentarios adicionales sobre la orden (máximo 128 caracteres)"></textarea>
+                            <small class="form-text">@(editOrder.Comment?.Length ?? 0)/128 caracteres</small>
+                        </div>
+                    </div>
+                    
+                    @if (HasDateValidationError())
+                    {
+                        <div class="validation-errors">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Validación de Fechas:</strong>
+                                <ul>
+                                    <li>La fecha de vencimiento debe ser posterior a la fecha de orden</li>
+                                    <li>La fecha de envío no puede ser anterior a la fecha de orden</li>
+                                    <li>La fecha de orden no puede ser en el futuro</li>
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gradient btn-outline" @onclick="CloseEditModal" disabled="@isEditing">
+                    Cancelar
+                </button>
+                <button class="btn-gradient" @onclick="ConfirmEdit" disabled="@(isEditing || HasDateValidationError())">
+                    @if (isEditing)
+                    {
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Actualizando...</span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-save"></i>
+                        <span>Guardar Cambios</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+@if (showCreateModal && newOrder != null)
+{
+    <div class="modal-overlay modal-backdrop" @onclick="CloseCreateModal">
+        <div class="modal-content modal-add" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-plus"></i>
+                    Nueva Orden de Venta
+                </h3>
+                <button class="modal-close" @onclick="CloseCreateModal" disabled="@isCreating">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(createErrorMessage))
+                {
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-circle"></i>
+                        @createErrorMessage
+                    </div>
+                }
+                <form>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="required">Cliente ID: *</label>
+                            <input type="number" @bind="newOrder.CustomerId" class="form-control" min="1" disabled="@isCreating" required />
+                            <small class="form-help">Identificador del cliente</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="required">Estado: *</label>
+                            <select @bind="newOrder.Status" class="form-control" disabled="@isCreating" required>
+                                <option value="1">Pendiente</option>
+                                <option value="2">Aprobada</option>
+                                <option value="3">Enviada</option>
+                                <option value="4">Cancelada</option>
+                                <option value="5">Completada</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="required">Fecha de Orden: *</label>
+                            <CustomDateInput @bind-Value="newOrder.OrderDate"
+                                             Disabled="@isCreating"
+                                             Max="@DateTime.Today"
+                                             IsInvalid="@CreateHasDateValidationError()"
+                                             CssClass="form-control" />
+                        </div>
+                        <div class="form-group">
+                            <label class="required">Fecha Vencimiento: *</label>
+                            <CustomDateInput @bind-Value="newOrder.DueDate"
+                                             Disabled="@isCreating"
+                                             Min="@newOrder.OrderDate"
+                                             IsInvalid="@CreateHasDateValidationError()"
+                                             CssClass="form-control" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Fecha de Envío:</label>
+                            <div class="form-check" style="margin-bottom: 6px;">
+                                <input type="checkbox" class="form-check-input" id="chkCreateHasShip" @bind="createHasShipDate" />
+                                <label class="form-check-label" for="chkCreateHasShip">Incluir fecha de envío</label>
+                            </div>
+                            <CustomDateInput @bind-Value="createShipDateTemp"
+                                             Disabled="@(isCreating || !createHasShipDate)"
+                                             Min="@newOrder.OrderDate"
+                                             CssClass="form-control" />
+                        </div>
+                        <div class="form-group">
+                            <label>Número de Orden de Compra:</label>
+                            <input type="text" @bind="newOrder.PurchaseOrderNumber" class="form-control" maxlength="25" disabled="@isCreating" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Número de Cuenta:</label>
+                            <input type="text" @bind="newOrder.AccountNumber" class="form-control" maxlength="15" disabled="@isCreating" />
+                        </div>
+                        <div class="form-group">
+                            <label>Comentarios:</label>
+                            <textarea @bind="newOrder.Comment" class="form-control" rows="2" maxlength="128" disabled="@isCreating"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Orden en línea:</label>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="chkOnline" @bind="newOrder.OnlineOrderFlag" disabled="@isCreating" />
+                                <label class="form-check-label" for="chkOnline">Sí</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Vendedor (opcional):</label>
+                            <input type="number" @bind="newOrder.SalesPersonId" class="form-control" min="1" disabled="@isCreating" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Territorio (opcional):</label>
+                            <input type="number" @bind="newOrder.TerritoryId" class="form-control" min="1" disabled="@isCreating" />
+                        </div>
+                        <div class="form-group">
+                            <label>Código Aprobación Tarjeta (opcional):</label>
+                            <input type="text" @bind="newOrder.CreditCardApprovalCode" class="form-control" maxlength="15" disabled="@isCreating" />
+                        </div>
+                    </div>
+                </form>
+
+                @if (CreateHasDateValidationError())
+                {
+                    <div class="validation-errors">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Validación de Fechas:</strong>
+                            <ul>
+                                <li>La fecha de orden no puede ser en el futuro</li>
+                                <li>La fecha de vencimiento debe ser posterior o igual a la fecha de orden</li>
+                                <li>La fecha de envío no puede ser anterior a la fecha de orden</li>
+                            </ul>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gradient btn-outline" @onclick="CloseCreateModal" disabled="@isCreating">
+                    Cancelar
+                </button>
+                <button class="btn-gradient" @onclick="ConfirmCreate" disabled="@(isCreating || CreateHasDateValidationError())">
+                    @if (isCreating)
+                    {
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Creando...</span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-plus"></i>
+                        <span>Crear Orden</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Estados de la UI
+    private bool isLoading = true;
+    private bool showDeleteModal = false;
+    private bool isDeleting = false;
+    private string deleteErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.SalesOrder? selectedOrder = null;
+    private int? selectedOrderId = null; // selección para panel detalle
+    
+    // Estados para edición
+    private bool showEditModal = false;
+    private bool isEditing = false;
+    private string editErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.SalesOrder? editOrder = null;
+    private bool editHasShipDate = false;
+    private DateTime editShipDateTemp = DateTime.Today;
+    
+    // Estados para creación
+    private bool showCreateModal = false;
+    private bool isCreating = false;
+    private string createErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.SalesOrder? newOrder = null;
+    private bool createHasShipDate = false;
+    private DateTime createShipDateTemp = DateTime.Today;
+
+    // Parámetros de búsqueda y filtrado
+    private string searchTerm = string.Empty;
+    private string statusFilter = string.Empty;
+    private string sortBy = "OrderDate";
+    private string sortDirection = "desc";
+    
+    // Parámetros de paginación
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalOrders = 0;
+    private decimal totalValue = 0;
+    
+    // Resultado paginado del servidor
+    private AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.SalesOrder>? pagedResult = null;
+
+    // Timer para búsqueda con delay
+    private Timer? searchTimer;
+    
+    // Debug
+    private bool usingServerPagination = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrdersCount();
+        await LoadOrders();
+    }
+
+    private async Task LoadOrdersCount()
+    {
+        try
+        {
+            totalOrders = await ApiService.GetOrdersCountAsync();
+            
+            // Calcular valor total (este podría ser optimizado con un endpoint específico)
+            var allOrders = await ApiService.GetOrdersAsync();
+            totalValue = allOrders.Sum(o => o.TotalDue);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading orders count: {ex.Message}");
+            totalOrders = 0;
+            totalValue = 0;
+        }
+    }
+
+    private async Task LoadOrders()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+            
+            var paginationParams = new AdventureWorks.Enterprise.WebApp.Models.PaginationParams
+            {
+                Page = currentPage,
+                PageSize = pageSize,
+                Search = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+                SortBy = sortBy,
+                SortDirection = sortDirection
+            };
+
+            try
+            {
+                pagedResult = await ApiService.GetOrdersPagedAsync(paginationParams);
+                usingServerPagination = true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Server pagination failed: {ex.Message}");
+                var allOrders = await ApiService.GetOrdersAsync();
+                pagedResult = SimulateClientPagination(allOrders);
+                usingServerPagination = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error in LoadOrders: {ex.Message}");
+            pagedResult = new AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.SalesOrder>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.SalesOrder> SimulateClientPagination(List<AdventureWorks.Enterprise.WebApp.Models.SalesOrder> allOrders)
+    {
+        var filteredOrders = allOrders.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var search = searchTerm.ToLower();
+            filteredOrders = filteredOrders.Where(o =>
+                (o.SalesOrderNumber?.ToLower().Contains(search) ?? false) ||
+                (o.PurchaseOrderNumber?.ToLower().Contains(search) ?? false) ||
+                (o.AccountNumber?.ToLower().Contains(search) ?? false) ||
+                o.SalesOrderId.ToString().Contains(search) ||
+                o.CustomerId.ToString().Contains(search));
+        }
+
+        if (!string.IsNullOrEmpty(statusFilter))
+        {
+            if (byte.TryParse(statusFilter, out byte status))
+            {
+                filteredOrders = filteredOrders.Where(o => o.Status == status);
+            }
+        }
+
+        var isDescending = sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+        filteredOrders = sortBy.ToLower() switch
+        {
+            "salesorderid" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.SalesOrderId)
+                : filteredOrders.OrderBy(o => o.SalesOrderId),
+            "salesordernumber" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.SalesOrderNumber ?? string.Empty)
+                : filteredOrders.OrderBy(o => o.SalesOrderNumber ?? string.Empty),
+            "orderdate" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.OrderDate)
+                : filteredOrders.OrderBy(o => o.OrderDate),
+            "duedate" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.DueDate)
+                : filteredOrders.OrderBy(o => o.DueDate),
+            "customerid" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.CustomerId)
+                : filteredOrders.OrderBy(o => o.CustomerId),
+            "totaldue" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.TotalDue)
+                : filteredOrders.OrderBy(o => o.TotalDue),
+            "status" => isDescending
+                ? filteredOrders.OrderByDescending(o => o.Status)
+                : filteredOrders.OrderBy(o => o.Status),
+            _ => isDescending
+                ? filteredOrders.OrderByDescending(o => o.OrderDate)
+                : filteredOrders.OrderBy(o => o.OrderDate)
+        };
+
+        var totalCount = filteredOrders.Count();
+        var orders = filteredOrders
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return new AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.SalesOrder>
+        {
+            Items = orders,
+            TotalCount = totalCount,
+            CurrentPage = currentPage,
+            PageSize = pageSize
+        };
+    }
+
+    private async Task NavigateToPageAsync(int targetPage)
+    {
+        var maxPages = pagedResult?.TotalPages ?? 1;
+        if (targetPage < 1 || targetPage > maxPages || targetPage == currentPage)
+        {
+            return;
+        }
+
+        currentPage = targetPage;
+        await LoadOrders();
+    }
+
+    private bool CanGoToPreviousPage() => currentPage > 1;
+    private bool CanGoToNextPage() => currentPage < (pagedResult?.TotalPages ?? 1);
+
+    private void OnSearchChanged()
+    {
+        searchTimer?.Dispose();
+        searchTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                currentPage = 1;
+                await LoadOrders();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task OnStatusFilterChanged()
+    {
+        currentPage = 1;
+        await LoadOrders();
+    }
+
+    private async Task OnPageSizeChangedAsync()
+    {
+        currentPage = 1;
+        await LoadOrders();
+    }
+
+    private async Task OnSortChangedAsync()
+    {
+        currentPage = 1;
+        await LoadOrders();
+    }
+
+    private async Task ToggleSortDirection()
+    {
+        sortDirection = sortDirection == "asc" ? "desc" : "asc";
+        await LoadOrders();
+    }
+
+    private async Task ClearFilters()
+    {
+        searchTerm = string.Empty;
+        statusFilter = string.Empty;
+        currentPage = 1;
+        await LoadOrders();
+    }
+
+    private async Task RefreshData()
+    {
+        searchTerm = string.Empty;
+        statusFilter = string.Empty;
+        currentPage = 1;
+        await LoadOrdersCount();
+        await LoadOrders();
+    }
+
+    private void ViewOrder(AdventureWorks.Enterprise.WebApp.Models.SalesOrder order)
+    {
+        // En maestro-detalle, seleccionar en lugar de navegar
+        SelectOrder(order.SalesOrderId);
+    }
+
+    private void SelectOrder(int id)
+    {
+        selectedOrderId = id;
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        selectedOrderId = null;
+    }
+
+    private void EditOrder(AdventureWorks.Enterprise.WebApp.Models.SalesOrder order)
+    {
+        editOrder = new AdventureWorks.Enterprise.WebApp.Models.SalesOrder
+        {
+            SalesOrderId = order.SalesOrderId,
+            SalesOrderNumber = order.SalesOrderNumber,
+            CustomerId = order.CustomerId,
+            OrderDate = order.OrderDate,
+            DueDate = order.DueDate,
+            ShipDate = order.ShipDate,
+            Status = order.Status,
+            SubTotal = order.SubTotal,
+            TaxAmt = order.TaxAmt,
+            Freight = order.Freight,
+            TotalDue = order.TotalDue,
+            Comment = order.Comment,
+            PurchaseOrderNumber = order.PurchaseOrderNumber,
+            AccountNumber = order.AccountNumber
+        };
+        
+        editHasShipDate = order.ShipDate.HasValue;
+        editShipDateTemp = order.ShipDate ?? order.OrderDate;
+        
+        editErrorMessage = string.Empty;
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        if (!isEditing)
+        {
+            showEditModal = false;
+            editOrder = null;
+            editErrorMessage = string.Empty;
+        }
+    }
+
+    private bool CreateHasDateValidationError()
+    {
+        if (newOrder == null) return false;
+        if (newOrder.OrderDate.Date > DateTime.Today) return true;
+        if (newOrder.DueDate.Date < newOrder.OrderDate.Date) return true;
+        if (createHasShipDate && createShipDateTemp.Date < newOrder.OrderDate.Date) return true;
+        return false;
+    }
+
+    private async Task ConfirmCreate()
+    {
+        if (newOrder == null || isCreating) return;
+
+        var errors = new List<string>();
+        if (newOrder.CustomerId <= 0) errors.Add("El Cliente ID es obligatorio y debe ser mayor a 0.");
+        if (newOrder.OrderDate == default) errors.Add("La Fecha de Orden es obligatoria.");
+        if (newOrder.DueDate == default) errors.Add("La Fecha de Vencimiento es obligatoria.");
+        if (CreateHasDateValidationError()) errors.Add("Corrija las fechas ingresadas.");
+
+        if (newOrder.SalesPersonId.HasValue && newOrder.SalesPersonId.Value <= 0)
+            errors.Add("El Vendedor debe ser mayor a 0, o dejar vacío.");
+        if (newOrder.TerritoryId.HasValue && newOrder.TerritoryId.Value <= 0)
+            errors.Add("El Territorio debe ser mayor a 0, o dejar vacío.");
+
+        if (errors.Any())
+        {
+            createErrorMessage = string.Join(" ", errors);
+            return;
+        }
+
+        try
+        {
+            isCreating = true;
+            createErrorMessage = string.Empty;
+            StateHasChanged();
+
+            newOrder.ShipDate = createHasShipDate ? createShipDateTemp : null;
+
+            var created = await ApiService.CreateOrderAsync(newOrder);
+            if (created != null)
+            {
+                showCreateModal = false;
+                var orderNumber = created.SalesOrderNumber ?? created.SalesOrderId.ToString();
+                newOrder = null;
+                createErrorMessage = string.Empty;
+
+                await NotificationService.ShowSuccessAsync($"Orden '{orderNumber}' creada exitosamente con ID: {created.SalesOrderId}");
+                currentPage = 1;
+                await LoadOrdersCount();
+                await LoadOrders();
+            }
+            else
+            {
+                createErrorMessage = "No se pudo crear la orden. Verifique los datos e intente nuevamente.";
+                await NotificationService.ShowErrorAsync("Error al crear la orden.");
+            }
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Error al crear la orden: {ex.Message}";
+            await NotificationService.ShowErrorAsync("Error al crear la orden.");
+        }
+        finally
+        {
+            isCreating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmEdit()
+    {
+        if (editOrder == null || isEditing) return;
+
+        if (HasDateValidationError())
+        {
+            editErrorMessage = "Por favor corrija los errores de validación de fechas antes de guardar.";
+            return;
+        }
+
+        editOrder.ShipDate = editHasShipDate ? editShipDateTemp : null;
+
+        var orderNumber = editOrder.SalesOrderNumber;
+
+        try
+        {
+            isEditing = true;
+            editErrorMessage = string.Empty;
+            StateHasChanged();
+
+            var success = await ApiService.UpdateOrderAsync(editOrder.SalesOrderId, editOrder);
+            
+            if (success)
+            {
+                showEditModal = false;
+                var originalOrder = editOrder;
+                editOrder = null;
+                editErrorMessage = string.Empty;
+                
+                await NotificationService.ShowSuccessAsync($"Orden '{orderNumber}' actualizada exitosamente.");
+                
+                await LoadOrders();
+                if (selectedOrderId == originalOrder?.SalesOrderId)
+                {
+                    // Forzar refresco del panel detalle reutilizando mismo Id
+                    var tmp = selectedOrderId;
+                    selectedOrderId = null;
+                    await Task.Delay(50);
+                    selectedOrderId = tmp;
+                }
+            }
+            else
+            {
+                editErrorMessage = "No se pudo actualizar la orden. Esto puede deberse a restricciones de la base de datos o problemas de conectividad. Verifique que solo esté modificando campos permitidos (fechas, estado y comentarios).";
+                await NotificationService.ShowErrorAsync("Error al actualizar la orden. La base de datos tiene restricciones especiales para órdenes de venta.");
+            }
+        }
+        catch (Exception ex)
+        {
+            editErrorMessage = $"Error inesperado: {ex.Message}";
+            await NotificationService.ShowErrorAsync("Ocurrió un error inesperado al actualizar la orden. Esto puede deberse a restricciones especiales de la base de datos AdventureWorks.");
+            System.Diagnostics.Debug.WriteLine($"Error updating order: {ex}");
+        }
+        finally
+        {
+            isEditing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (selectedOrder == null || isDeleting) return;
+
+        var orderNumber = selectedOrder.SalesOrderNumber;
+
+        try
+        {
+            isDeleting = true;
+            deleteErrorMessage = string.Empty;
+            StateHasChanged();
+
+            var success = await ApiService.DeleteOrderAsync(selectedOrder.SalesOrderId);
+            if (success)
+            {
+                showDeleteModal = false;
+                selectedOrder = null;
+                deleteErrorMessage = string.Empty;
+                
+                await NotificationService.ShowSuccessAsync($"Orden '{orderNumber}' eliminada exitosamente.");
+                
+                if (pagedResult?.Items.Count == 1 && currentPage > 1)
+                {
+                    currentPage--;
+                }
+                
+                await LoadOrdersCount();
+                await LoadOrders();
+                if (selectedOrderId == null || selectedOrderId == selectedOrder?.SalesOrderId)
+                {
+                    ClearSelection();
+                }
+            }
+            else
+            {
+                deleteErrorMessage = "No se pudo eliminar la orden. Puede que tenga registros asociados que impiden su eliminación.";
+                await NotificationService.ShowErrorAsync("Error al eliminar la orden. Por favor, intente nuevamente.");
+            }
+        }
+        catch (Exception ex)
+        {
+            deleteErrorMessage = $"Error inesperado: {ex.Message}";
+            await NotificationService.ShowErrorAsync("Ocurrió un error inesperado al eliminar la orden.");
+            System.Diagnostics.Debug.WriteLine($"Error deleting order: {ex}");
+        }
+        finally
+        {
+            isDeleting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void DeleteOrder(AdventureWorks.Enterprise.WebApp.Models.SalesOrder order)
+    {
+        selectedOrder = order;
+        deleteErrorMessage = string.Empty;
+        showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        if (!isDeleting)
+        {
+            showDeleteModal = false;
+            selectedOrder = null;
+            deleteErrorMessage = string.Empty;
+        }
+    }
+
+    private void ShowCreateOrderModal()
+    {
+        newOrder = new AdventureWorks.Enterprise.WebApp.Models.SalesOrder
+        {
+            CustomerId = 0,
+            OrderDate = DateTime.Today,
+            DueDate = DateTime.Today,
+            ShipDate = null,
+            Status = 1,
+            OnlineOrderFlag = true,
+            SubTotal = 0,
+            TaxAmt = 0,
+            Freight = 0,
+            TotalDue = 0,
+            Comment = string.Empty,
+            PurchaseOrderNumber = string.Empty,
+            AccountNumber = string.Empty,
+            SalesPersonId = null,
+            TerritoryId = null,
+            CreditCardApprovalCode = string.Empty
+        };
+        createHasShipDate = false;
+        createShipDateTemp = DateTime.Today;
+        
+        createErrorMessage = string.Empty;
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void HandleRequestEdit(int id)
+    {
+        var item = pagedResult?.Items.FirstOrDefault(o => o.SalesOrderId == id);
+        if (item is null)
+        {
+            _ = OpenEditFromApiAsync(id);
+            return;
+        }
+        EditOrder(item);
+    }
+
+    private async Task OpenEditFromApiAsync(int id)
+    {
+        try
+        {
+            var item = await ApiService.GetOrderAsync(id);
+            if (item != null)
+            {
+                EditOrder(item);
+            }
+        }
+        catch { }
+    }
+
+    private bool HasDateValidationError()
+    {
+        if (editOrder == null) return false;
+        if (editOrder.OrderDate.Date > DateTime.Today) return true;
+        if (editOrder.DueDate.Date < editOrder.OrderDate.Date) return true;
+        if (editHasShipDate && editShipDateTemp.Date < editOrder.OrderDate.Date) return true;
+        return false;
+    }
+
+    private string GetStatusText(byte status)
+    {
+        return status switch
+        {
+            1 => "Pendiente",
+            2 => "Aprobada",
+            3 => "Enviada",
+            4 => "Cancelada",
+            5 => "Completada",
+            _ => "Desconocido"
+        };
+    }
+
+    private string GetStatusClass(byte status)
+    {
+        return status switch
+        {
+            1 => "status-pending",
+            2 => "status-approved",
+            3 => "status-shipped",
+            4 => "status-cancelled",
+            5 => "status-completed",
+            _ => "status-unknown"
+        };
+    }
+
+    private string FormatCurrency(decimal amount)
+    {
+        return amount.ToString("C2");
+    }
+
+    public void Dispose()
+    {
+        searchTimer?.Dispose();
+    }
+
+    private List<int> GetPageNumbers()
+    {
+        if (pagedResult == null) return new List<int>();
+
+        const int maxVisiblePages = 5;
+        var pages = new List<int>();
+        var totalPages = pagedResult.TotalPages;
+        
+        if (totalPages <= maxVisiblePages)
+        {
+            for (int i = 1; i <= totalPages; i++)
+                pages.Add(i);
+        }
+        else
+        {
+            int start = Math.Max(1, currentPage - 2);
+            int end = Math.Min(totalPages, start + maxVisiblePages - 1);
+            
+            if (end - start < maxVisiblePages - 1)
+                start = Math.Max(1, end - maxVisiblePages + 1);
+            
+            for (int i = start; i <= end; i++)
+                pages.Add(i);
+        }
+        
+        return pages;
+    }
+
+    private void CloseCreateModal()
+    {
+        if (!isCreating)
+        {
+            showCreateModal = false;
+            createErrorMessage = string.Empty;
+            newOrder = null;
+        }
+    }
+}
+
+<style>
+/***** Layout maestro-detalle y tabla *****/
+.master-detail-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start; width: 100%; box-sizing: border-box; }
+.master-panel { min-width: 0; }
+.list-scroll { overflow: auto; max-height: calc(100vh - 25rem); border: 1px solid #e5e7eb; border-radius: .5rem; background: #fff; border-top-left-radius: 0; border-top-right-radius: 0; }
+.orders-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.orders-table thead th { /* position: sticky; */ top: 0; background: #f9fafb; z-index: 5; text-align: left; padding: .5rem .75rem; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+.orders-table tbody td { padding: .45rem .75rem; border-bottom: 1px solid #f1f5f9; }
+.orders-table td, .orders-table th { overflow: hidden; }
+/* Wrap por defecto, sin scroll horizontal */
+.orders-table tbody td { white-space: normal; word-break: break-word; }
+/* No wrap para columnas típicas cortas (ID, fechas, total, acción) */
+.orders-table thead th:nth-child(2),
+.orders-table thead th:nth-child(4),
+.orders-table thead th:nth-child(5),
+.orders-table thead th:nth-child(6),
+.orders-table thead th:nth-child(8),
+.orders-table tbody td:nth-child(2),
+.orders-table tbody td:nth-child(4),
+.orders-table tbody td:nth-child(5),
+.orders-table tbody td:nth-child(6),
+.orders-table tbody td:nth-child(8) { white-space: nowrap; }
+.orders-table tbody tr { cursor: pointer; }
+.orders-table tbody tr:hover { background: #f8fafc; }
+.selected-row { outline: 2px solid #7c9cff; outline-offset: -2px; background: #eef2ff; }
+.actions { display: flex; gap: .35rem; justify-content: flex-start; }
+.btn-action { border: 1px solid #e5e7eb; background: #fff; padding: .35rem .45rem; border-radius: .375rem; }
+.btn-action:hover { background: #f3f4f6; }
+
+/* Nuevo estilo para la cabecera fija fuera de la tabla */
+.orders-header-grid {
+    display: flex;
+    background: #f9fafb;
+    padding: .5rem .75rem;
+    font-weight: 600;
+    border: 1px solid #e5e7eb;
+    border-bottom: none;
+    border-top-left-radius: .5rem;
+    border-top-right-radius: .5rem;
+}
+
+.orders-header-grid .header-item {
+    overflow: hidden;
+    white-space: nowrap;
+    padding-right: 10px; /* Añadir un poco de espacio entre cabeceras */
+}
+
+/***** Panel detalle *****/
+.detail-panel { position: sticky; top: 1rem; height: calc(100vh - 6rem); border-left: 1px solid #e5e7eb; padding-left: 0; overflow: auto; background: #fff; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.detail-panel .detail-header { display:flex; justify-content: space-between; align-items:center; padding:.6rem .85rem; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background: #fff; z-index: 6; }
+.detail-panel .btn-close { background: transparent; border: none; cursor: pointer; font-size: 1rem; }
+.empty-detail { padding: 1.25rem; text-align: center; color: #6b7280; }
+.detail-content { padding: .5rem .85rem 1rem; }
+
+/* Compactar tarjetas del detalle embebido para liberar ancho */
+.detail-panel .order-details-container { font-size: .95rem; }
+.detail-panel .order-header-card { padding: .5rem .75rem; }
+.detail-panel .order-main-info h2 { margin: 0 0 .25rem 0; font-size: 1.1rem; }
+.detail-panel .order-main-info p { margin: 0; }
+.detail-panel .details-grid { gap: .25rem; }
+.detail-panel .details-section h3 { margin: .5rem 0; font-size: 1rem; }
+.detail-panel .detail-row { margin: .25rem 0; }
+.detail-panel .total-amount { font-size: 1.1rem; }
+
+/***** Modales (por encima del thead sticky) *****/
+.modal-overlay { position:fixed; inset:0; z-index:10020; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
+.modal-backdrop { background: rgba(0,0,0,.45); backdrop-filter: blur(2px); }
+.modal-content { z-index:10030; max-height:90vh; overflow:auto; }
+
+/* Responsivo */
+@@media (max-width: 1200px) { .master-detail-layout { grid-template-columns: 1.5fr 1fr; } }
+@@media (max-width: 1024px) { .master-detail-layout { grid-template-columns: 1fr; } .detail-panel { position: static; height: auto; } .list-scroll { max-height: none; } }
+</style>

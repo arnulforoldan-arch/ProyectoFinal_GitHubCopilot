@@ -1,0 +1,179 @@
+/* Layout improvements for better aesthetics */
+
+/* Container width constraints for better readability */
+.content {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+/* Page specific containers */
+.page-header {
+    max-width: 1280px;
+    margin: 0 auto 1.5rem auto;
+}
+
+.toolbar-section {
+    max-width: 1280px;
+    margin: 0 auto 1.5rem auto;
+}
+
+/* Employees and Order list */
+.employees-grid,
+.orders-grid,
+.master-detail-layout,
+.stats-summary {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Better width for the master-detail layout */
+.master-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr minmax(420px, 32vw);
+    gap: 1.25rem;
+}
+
+/* Search bars */
+.search-bar, 
+.toolbar-actions,
+.toolbar-section {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-bar {
+    max-width: 350px;
+}
+
+.search-input-group {
+    max-width: 350px;
+}
+
+/* Employee and Order Details */
+.employee-details-container,
+.order-details-container {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.order-header-card,
+.employee-header-card {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Form containers */
+.form-modern {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Report containers */
+.report-container {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+/* Pagination controls */
+.pagination-controls {
+    max-width: 1280px;
+    margin: 1.5rem auto;
+}
+
+/* Product list and details */
+.product-grid,
+.product-details {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+/* Prevent overly wide tables */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Empty states centered */
+.empty-state {
+    max-width: 600px;
+    margin: 2rem auto;
+}
+
+/* Details grid with better width */
+.details-grid {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)) !important;
+}
+
+/* Table styling improvements */
+.orders-table {
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Status badges styling */
+.status-badge {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    border-radius: 0.5em;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1366px) {
+    .content, 
+    .page-header,
+    .toolbar-section,
+    .employees-grid,
+    .orders-grid,
+    .master-detail-layout,
+    .employee-details-container,
+    .order-details-container,
+    .product-grid,
+    .product-details,
+    .report-container,
+    .stats-summary,
+    .details-grid {
+        max-width: 1100px;
+    }
+    
+    .master-detail-layout {
+        grid-template-columns: 1fr minmax(380px, 35vw);
+    }
+}
+
+@media (max-width: 1024px) {
+    .master-detail-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .content,
+    .page-header,
+    .toolbar-section,
+    .employees-grid,
+    .orders-grid,
+    .master-detail-layout,
+    .employee-details-container,
+    .order-details-container,
+    .product-grid,
+    .product-details,
+    .report-container,
+    .stats-summary,
+    .details-grid {
+        max-width: 100%;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}

@@ -1,0 +1,41 @@
+@* Portal de Ventas: métricas y vistas resumen *@
+@page "/ventas"
+
+<PageTitle>Portal de Ventas - Sistema de Gestión Empresarial</PageTitle>
+
+<!-- Encabezado -->
+<div class="page-header">
+    <h1><i class="fas fa-chart-line page-icon"></i> Portal de Ventas</h1>
+    <p>Gestión integral de ventas y operaciones comerciales</p>
+</div>
+
+<!-- Métricas principales -->
+<div class="dashboard-grid">
+    <div class="card-glass metric-card"><div class="metric-icon sales"><i class="fas fa-euro-sign"></i></div><div class="metric-content"><h3>Ventas del Mes</h3><div class="metric-value">€2,547,890</div><div class="metric-change positive"><i class="fas fa-arrow-up"></i> +12.5%</div></div></div>
+    <div class="card-glass metric-card"><div class="metric-icon clients"><i class="fas fa-users"></i></div><div class="metric-content"><h3>Clientes Activos</h3><div class="metric-value">1,234</div><div class="metric-change positive"><i class="fas fa-arrow-up"></i> +8.2%</div></div></div>
+    <div class="card-glass metric-card"><div class="metric-icon orders"><i class="fas fa-shopping-cart"></i></div><div class="metric-content"><h3>Pedidos Pendientes</h3><div class="metric-value">89</div><div class="metric-change neutral"><i class="fas fa-minus"></i> Sin cambios</div></div></div>
+    <div class="card-glass metric-card"><div class="metric-icon conversion"><i class="fas fa-percentage"></i></div><div class="metric-content"><h3>Conversión</h3><div class="metric-value">24.8%</div><div class="metric-change positive"><i class="fas fa-arrow-up"></i> +3.1%</div></div></div>
+</div>
+
+<!-- Secciones de contenido -->
+<div class="content-sections">
+    <div class="card-glass">
+        <h2><i class="fas fa-list-alt section-icon"></i> Últimas Ventas</h2>
+        <div class="table-container">
+            <table class="modern-table">
+                <thead><tr><th>ID Venta</th><th>Cliente</th><th>Fecha</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>#V-001</strong></td><td>Empresa ABC S.A.</td><td>15/11/2024</td><td><strong>€12,450</strong></td><td><span class="status-badge completed"><i class="fas fa-check-circle"></i> Completada</span></td><td><button class="btn-action view" title="Ver detalles"><i class="fas fa-eye"></i></button><button class="btn-action edit" title="Editar"><i class="fas fa-edit"></i></button></td></tr>
+                    <tr><td><strong>#V-002</strong></td><td>Distribuciones XYZ</td><td>14/11/2024</td><td><strong>€8,900</strong></td><td><span class="status-badge pending"><i class="fas fa-clock"></i> Pendiente</span></td><td><button class="btn-action view" title="Ver detalles"><i class="fas fa-eye"></i></button><button class="btn-action edit" title="Editar"><i class="fas fa-edit"></i></button></td></tr>
+                    <tr><td><strong>#V-003</strong></td><td>Tecnología Avanzada Ltd.</td><td>13/11/2024</td><td><strong>€25,600</strong></td><td><span class="status-badge processing"><i class="fas fa-cog fa-spin"></i> Procesando</span></td><td><button class="btn-action view" title="Ver detalles"><i class="fas fa-eye"></i></button><button class="btn-action edit" title="Editar"><i class="fas fa-edit"></i></button></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <!-- Tarjetas secundarias -->
+    <div class="cards-grid">
+        <div class="card-glass"><div class="card-header"><div class="card-icon analytics"><i class="fas fa-chart-bar"></i></div><h3>Análisis de Tendencias</h3></div><p>Tendencias de ventas y patrones de clientes.</p><button class="btn-gradient"><i class="fas fa-chart-line"></i> Ver Análisis</button></div>
+        <div class="card-glass"><div class="card-header"><div class="card-icon targets"><i class="fas fa-bullseye"></i></div><h3>Objetivos de Ventas</h3></div><p>Seguimiento de objetivos mensuales y trimestrales.</p><button class="btn-gradient"><i class="fas fa-bullseye"></i> Ver Objetivos</button></div>
+        <div class="card-glass"><div class="card-header"><div class="card-icon reports"><i class="fas fa-file-chart"></i></div><h3>Informes</h3></div><p>Generación de informes detallados de rendimiento.</p><button class="btn-gradient"><i class="fas fa-download"></i> Generar Informe</button></div>
+    </div>
+</div>

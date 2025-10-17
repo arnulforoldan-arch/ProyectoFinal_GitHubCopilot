@@ -1,0 +1,180 @@
+﻿@using AdventureWorks.Enterprise.WebApp.Services
+@rendermode InteractiveServer
+@inject ThemeService ThemeService
+@implements IAsyncDisposable
+
+<nav class="horizontal-nav">
+    <div class="nav-container">
+        <div class="brand-section">
+            <i class="fas fa-building brand-icon"></i>
+            <h2>AdventureWorks Enterprise</h2>
+        </div>
+        <ul class="nav-menu">
+            <li>
+                <NavLink class="nav-item nav-link-horizontal" href="/">
+                    <span class="nav-link-content">
+                        <i class="fas fa-home nav-icon"></i>
+                        <span class="nav-text">Inicio</span>
+                    </span>
+                </NavLink>
+            </li>
+            <li class="dropdown" @onmouseenter="@(() => ShowDropdown(true))" @onmouseleave="@(() => ShowDropdown(false))">
+                <button class="nav-item dropdown-toggle nav-link-horizontal" @onclick="@(() => ToggleDropdown())">
+                    <span class="nav-link-content">
+                        <i class="fas fa-users nav-icon"></i>
+                        <span class="nav-text">Recursos Humanos</span>
+                    </span>
+                    <i class="fas fa-chevron-down dropdown-arrow @(rrhhOpen ? "rotate" : "")"></i>
+                </button>
+                <ul class="dropdown-menu @(rrhhOpen ? "show" : "")">
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal" href="/Employees">
+                            <span class="nav-link-content">
+                                <i class="fas fa-users nav-icon"></i>
+                                <span>Empleados</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal">
+                            <span class="nav-link-content">
+                                <i class="fas fa-money-bill nav-icon"></i>
+                                <span>Nóminas</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal">
+                            <span class="nav-link-content">
+                                <i class="fas fa-chart-bar nav-icon"></i>
+                                <span>Reportes</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                </ul>
+            </li>
+            <li class="dropdown" @onmouseenter="@(() => ShowVentasDropdown(true))" @onmouseleave="@(() => ShowVentasDropdown(false))">
+                <button class="nav-item dropdown-toggle nav-link-horizontal" @onclick="@(() => ToggleVentasDropdown())">
+                    <span class="nav-link-content">
+                        <i class="fas fa-shopping-cart nav-icon"></i>
+                        <span class="nav-text">Comercial</span>
+                    </span>
+                    <i class="fas fa-chevron-down dropdown-arrow @(ventasOpen ? "rotate" : "")"></i>
+                </button>
+                <ul class="dropdown-menu @(ventasOpen ? "show" : "")">
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal" href="/orders">
+                            <span class="nav-link-content">
+                                <i class="fas fa-clipboard-list nav-icon"></i>
+                                <span>Pedidos</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal">
+                            <span class="nav-link-content">
+                                <i class="fas fa-users nav-icon"></i>
+                                <span>Clientes</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal">
+                            <span class="nav-link-content">
+                                <i class="fas fa-file-invoice-dollar nav-icon"></i>
+                                <span>Facturación</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                </ul>
+            </li>
+            <li class="dropdown" @onmouseenter="@(() => ShowProduccionDropdown(true))" @onmouseleave="@(() => ShowProduccionDropdown(false))">
+                <button class="nav-item dropdown-toggle nav-link-horizontal" @onclick="@(() => ToggleProduccionDropdown())">
+                    <span class="nav-link-content">
+                        <i class="fas fa-industry nav-icon"></i>
+                        <span class="nav-text">Producción</span>
+                    </span>
+                    <i class="fas fa-chevron-down dropdown-arrow @(produccionOpen ? "rotate" : "")"></i>
+                </button>
+                <ul class="dropdown-menu @(produccionOpen ? "show" : "")">
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal" href="/productlist">
+                            <span class="nav-link-content">
+                                <i class="fas fa-boxes nav-icon"></i>
+                                <span>Inventario</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal" href="/lowinventoryreport">
+                            <span class="nav-link-content">
+                                <i class="fas fa-exclamation-triangle nav-icon"></i>
+                                <span>Reporte Bajo Stock</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="dropdown-item nav-link-horizontal">
+                            <span class="nav-link-content">
+                                <i class="fas fa-medal nav-icon"></i>
+                                <span>Calidad</span>
+                            </span>
+                        </NavLink>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+        <div class="nav-actions">
+            <button class="theme-toggle" @onclick="ToggleTheme" title="Cambiar tema">
+                <i class="fas @(ThemeService.IsDarkTheme ? "fa-sun" : "fa-moon")"></i>
+            </button>
+            <div class="user-menu">
+                <i class="fas fa-user-circle"></i>
+                <span class="user-name">Usuario</span>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<style>
+/* estilos existentes */
+</style>
+
+@code {
+    private bool rrhhOpen;
+    private bool ventasOpen;
+    private bool produccionOpen;
+    private bool _hasRendered;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ThemeService.InitializeAsync();
+        ThemeService.OnThemeChanged += OnThemeChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _hasRendered = true;
+            await ThemeService.InitializeAfterRenderAsync();
+            StateHasChanged();
+        }
+    }
+
+    private void OnThemeChanged(bool _) => InvokeAsync(StateHasChanged);
+    private Task ToggleTheme() => ThemeService.ToggleThemeAsync();
+
+    private void ToggleDropdown() => rrhhOpen = !rrhhOpen;
+    private void ShowDropdown(bool show) => rrhhOpen = show;
+    private void ToggleVentasDropdown() => ventasOpen = !ventasOpen;
+    private void ShowVentasDropdown(bool show) => ventasOpen = show;
+    private void ToggleProduccionDropdown() => produccionOpen = !produccionOpen;
+    private void ShowProduccionDropdown(bool show) => produccionOpen = show;
+
+    public ValueTask DisposeAsync()
+    {
+        ThemeService.OnThemeChanged -= OnThemeChanged;
+        return ValueTask.CompletedTask;
+    }
+}

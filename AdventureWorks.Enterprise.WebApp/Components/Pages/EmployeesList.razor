@@ -1,0 +1,353 @@
+@* Listado y gestión de empleados con paginación, filtros y CRUD *@
+@page "/Employees"
+@rendermode InteractiveServer
+@using AdventureWorks.Enterprise.WebApp.Components.Shared
+@inject AdventureWorks.Enterprise.WebApp.Services.ApiService ApiService
+@inject AdventureWorks.Enterprise.WebApp.Services.NotificationService NotificationService
+@inject NavigationManager Navigation
+
+<PageTitle>Empleados - Sistema de Gestión Empresarial</PageTitle>
+<link href="css/CorporateTheme.css" rel="stylesheet" />
+
+<!-- Encabezado -->
+<div class="page-header">
+    <h1><i class="fas fa-users page-icon"></i> Empleados</h1>
+    <p>Gestione y supervise todos los empleados de su empresa</p>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar-section">
+    <div class="search-bar">
+        <div class="search-input-group">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged" placeholder="Buscar empleados..." class="form-control search-input" />
+        </div>
+    </div>
+    <div class="toolbar-actions">
+        <!-- quitar atributo duplicado onchange (solo @bind) -->
+        <select @bind="pageSize" class="form-control page-size-select">
+            <option value="5">5 por página</option>
+            <option value="10">10 por página</option>
+            <option value="20">20 por página</option>
+            <option value="50">50 por página</option>
+        </select>
+        <button class="btn-gradient" @onclick="ShowAddEmployeeModal"><i class="fas fa-plus"></i> Nuevo Empleado</button>
+        <button class="btn-gradient btn-secondary" @onclick="RefreshData"><i class="fas fa-sync-alt"></i> Actualizar</button>
+    </div>
+</div>
+
+<!-- Resumen -->
+<div class="stats-summary">
+    <div class="stat-card"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-content"><div class="stat-number">@totalEmployees</div><div class="stat-label">Total Empleados</div></div></div>
+    <div class="stat-card"><div class="stat-icon active"><i class="fas fa-filter"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.TotalCount ?? 0)</div><div class="stat-label">Empleados Filtrados</div></div></div>
+    <div class="stat-card"><div class="stat-icon success"><i class="fas fa-user-check"></i></div><div class="stat-content"><div class="stat-number">@activeEmployeesCount</div><div class="stat-label">Empleados Activos</div></div></div>
+    <div class="stat-card"><div class="stat-icon secondary"><i class="fas fa-file-alt"></i></div><div class="stat-content"><div class="stat-number">@(pagedResult?.Items.Count ?? 0)</div><div class="stat-label">En Esta Página</div></div></div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-section"><div class="loading-spinner"></div><p>Cargando empleados...</p></div>
+}
+else if (pagedResult == null || pagedResult.Items.Count == 0)
+{
+    <div class="empty-state">
+        <i class="fas fa-users empty-icon"></i>
+        <h3>No se encontraron empleados</h3>
+        <p>@(string.IsNullOrEmpty(searchTerm) ? "No hay empleados registrados en el sistema." : "No se encontraron empleados que coincidan con su búsqueda.")</p>
+        @if (!string.IsNullOrEmpty(searchTerm))
+        { <button class="btn-gradient btn-outline" @onclick="ClearFilters"><i class="fas fa-times"></i> Limpiar Filtros</button> }
+    </div>
+}
+else
+{
+    <div class="pagination-info">
+        <div class="page-info">Mostrando @pagedResult.StartIndex - @pagedResult.EndIndex de @pagedResult.TotalCount empleados</div>
+        <div class="sort-options">
+            <label>Ordenar por:</label>
+            <!-- quitar atributo duplicado onchange -->
+            <select @bind="sortBy" class="form-control sort-select">
+                <option value="EmployeeId">ID Empleado</option>
+                <option value="LoginId">Login</option>
+                <option value="JobTitle">Cargo</option>
+                <option value="HireDate">Fecha de Contratación</option>
+                <option value="NationalIdNumber">Número Nacional</option>
+            </select>
+            <button class="btn-sort @(sortDirection == "asc" ? "active" : string.Empty)" @onclick="ToggleSortDirection" title="@(sortDirection == "asc" ? "Orden Ascendente" : "Orden Descendente")">
+                <i class="fas @(sortDirection == "asc" ? "fa-sort-amount-up" : "fa-sort-amount-down")"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="orders-grid">
+        @foreach (var employee in pagedResult.Items)
+        {
+            <div class="order-card @(GetEmployeeStatusClass(employee.CurrentFlag))">
+                <div class="order-header">
+                    <div class="order-number">
+                        <h3>@FormatEmployeeName(employee.LoginId)</h3>
+                        <span class="order-id">ID: @employee.EmployeeId</span>
+                    </div>
+                    <div class="order-status">
+                        <span class="status-badge @(employee.CurrentFlag ? "status-completed" : "status-cancelled")">@(employee.CurrentFlag ? "Activo" : "Inactivo")</span>
+                    </div>
+                    <div class="order-actions">
+                        <button class="btn-action view" @onclick="() => ViewEmployee(employee)" title="Ver detalles"><i class="fas fa-eye"></i></button>
+                        <button class="btn-action edit" @onclick="() => EditEmployee(employee)" title="Editar"><i class="fas fa-edit"></i></button>
+                        <button class="btn-action delete" @onclick="() => DeleteEmployee(employee)" title="Eliminar"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div class="order-details">
+                    <div class="detail-row">
+                        <div class="detail-item"><i class="fas fa-briefcase detail-icon"></i><span class="detail-label">Cargo:</span><span class="detail-value">@employee.JobTitle</span></div>
+                        <div class="detail-item"><i class="fas fa-calendar detail-icon"></i><span class="detail-label">Contratado:</span><span class="detail-value">@employee.HireDate.ToString("dd/MM/yyyy")</span></div>
+                    </div>
+                    <div class="detail-row">
+                        @if (!string.IsNullOrEmpty(employee.NationalIdNumber))
+                        { <div class="detail-item"><i class="fas fa-id-card detail-icon"></i><span class="detail-label">ID Nacional:</span><span class="detail-value">@employee.NationalIdNumber</span></div> }
+                        <div class="detail-item"><i class="fas fa-user-tag detail-icon"></i><span class="detail-label">Tipo:</span><span class="detail-value">@(employee.SalariedFlag ? "Asalariado" : "Por Horas")</span></div>
+                    </div>
+                    <div class="order-totals"><div class="total-item total"><span class="total-label">Estado:</span><span class="total-value">@(employee.CurrentFlag ? "Activo" : "Inactivo")</span></div></div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="pagination-controls">
+        <div class="pagination-nav">
+            <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : string.Empty)" @onclick="() => NavigateToPageAsync(1)" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-double-left"></i> Primera</button>
+            <button class="btn-page @(!CanGoToPreviousPage() ? "disabled" : string.Empty)" @onclick="() => NavigateToPageAsync(currentPage - 1)" disabled="@(!CanGoToPreviousPage())"><i class="fas fa-angle-left"></i> Anterior</button>
+            <div class="page-numbers">
+                @foreach (var pageNum in GetPageNumbers())
+                { <button class="btn-page-number @(pageNum == currentPage ? "active" : string.Empty)" @onclick="() => NavigateToPageAsync(pageNum)">@pageNum</button> }
+            </div>
+            <button class="btn-page @(!CanGoToNextPage() ? "disabled" : string.Empty)" @onclick="() => NavigateToPageAsync(currentPage + 1)" disabled="@(!CanGoToNextPage())">Siguiente <i class="fas fa-angle-right"></i></button>
+            <button class="btn-page @(!CanGoToNextPage() ? "disabled" : string.Empty)" @onclick="() => NavigateToPageAsync(pagedResult?.TotalPages ?? 1)" disabled="@(!CanGoToNextPage())">Última <i class="fas fa-angle-double-right"></i></button>
+        </div>
+        <div class="pagination-summary">Página @currentPage de @(pagedResult?.TotalPages ?? 1)</div>
+    </div>
+}
+
+@if (showAddModal && newEmployee != null)
+{
+    <div class="modal-overlay" @onclick="CloseAddModal">
+        <div class="modal-content modal-add" @onclick:stopPropagation="true">
+            <div class="modal-header"><h3><i class="fas fa-user-plus"></i> Nuevo Empleado</h3><button class="modal-close" @onclick="CloseAddModal" disabled="@isCreating"><i class="fas fa-times"></i></button></div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row">
+                        <div class="form-group"><label class="required">ID Nacional: *</label><input type="text" @bind="newEmployee.NationalIdNumber" class="form-control" disabled="@isCreating" maxlength="15" required /></div>
+                        <div class="form-group"><label class="required">Login ID: *</label><input type="text" @bind="newEmployee.LoginId" class="form-control" disabled="@isCreating" maxlength="256" required /></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="required">Cargo: *</label><input type="text" @bind="newEmployee.JobTitle" class="form-control" disabled="@isCreating" maxlength="50" required /></div>
+                        <div class="form-group"><label class="required">Fecha de Nacimiento: *</label><CustomDateInput Value="@newEmployee.BirthDate" ValueChanged="OnBirthDateChanged" Disabled="@isCreating" Max="@DateTime.Today.AddYears(-18)" /></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="required">Estado Civil: *</label><select @bind="newEmployee.MaritalStatus" class="form-control" disabled="@isCreating" required><option value="">Seleccione...</option><option value="S">Soltero/a</option><option value="M">Casado/a</option><option value="D">Divorciado/a</option><option value="W">Viudo/a</option></select></div>
+                        <div class="form-group"><label class="required">Género: *</label><select @bind="newEmployee.Gender" class="form-control" disabled="@isCreating" required><option value="">Seleccione...</option><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="required">Fecha de Contratación: *</label><CustomDateInput Value="@newEmployee.HireDate" ValueChanged="OnHireDateChanged" Disabled="@isCreating" Max="@DateTime.Today" IsInvalid="@hireDateError" CssClass="form-control" /><small class="form-help">No puede ser futura</small>@if (hireDateError){<small class="form-help" style="color:red;">La fecha seleccionada es futura</small>}</div>
+                        <div class="form-group"><label class="required">Tipo de Empleado: *</label><select @bind="employeeSalariedFlagString" class="form-control" disabled="@isCreating" required><option value="">Seleccione...</option><option value="true">Asalariado</option><option value="false">Por Horas</option></select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Horas de Vacaciones:</label><input type="number" @bind="newEmployee.VacationHours" class="form-control" min="0" max="999" disabled="@isCreating" /></div>
+                        <div class="form-group"><label>Horas por Enfermedad:</label><input type="number" @bind="newEmployee.SickLeaveHours" class="form-control" min="0" max="999" disabled="@isCreating" /></div>
+                    </div>
+                </form>
+                @if (!string.IsNullOrEmpty(addErrorMessage)){<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>@addErrorMessage</div>}
+            </div>
+            <div class="modal-footer"><button class="btn-gradient btn-outline" @onclick="CloseAddModal" disabled="@isCreating">Cancelar</button><button class="btn-gradient" @onclick="ConfirmAdd" disabled="@isCreating">@if (isCreating){<i class="fas fa-spinner fa-spin"></i><span>Creando...</span>}else{<i class="fas fa-user-plus"></i><span>Crear Empleado</span>}</button></div>
+        </div>
+    </div>
+}
+
+@if (showDeleteModal && selectedEmployee != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header"><h3><i class="fas fa-exclamation-triangle"></i> Confirmar Eliminación</h3><button class="modal-close" @onclick="CloseDeleteModal" disabled="@isDeleting"><i class="fas fa-times"></i></button></div>
+            <div class="modal-body">
+                <p>¿Está seguro de eliminar a <strong>@FormatEmployeeName(selectedEmployee.LoginId)</strong>?</p>
+                <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> Acción irreversible.</p>
+                @if (!string.IsNullOrEmpty(deleteErrorMessage)){<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>@deleteErrorMessage</div>}
+            </div>
+            <div class="modal-footer"><button class="btn-gradient btn-outline" @onclick="CloseDeleteModal" disabled="@isDeleting">Cancelar</button><button class="btn-gradient btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">@if (isDeleting){<i class="fas fa-spinner fa-spin"></i><span>Eliminando...</span>}else{<i class="fas fa-trash"></i><span>Eliminar</span>}</button></div>
+        </div>
+    </div>
+}
+
+@if (showEditModal && editEmployee != null)
+{
+    <div class="modal-overlay" @onclick="CloseEditModal">
+        <div class="modal-content modal-edit" @onclick:stopPropagation="true">
+            <div class="modal-header"><h3><i class="fas fa-edit"></i> Editar Empleado</h3><button class="modal-close" @onclick="CloseEditModal" disabled="@isEditing"><i class="fas fa-times"></i></button></div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row"><div class="form-group"><label>ID Nacional:</label><input type="text" @bind="editEmployee.NationalIdNumber" class="form-control" disabled="@isEditing" /></div><div class="form-group"><label>Login ID:</label><input type="text" @bind="editEmployee.LoginId" class="form-control" disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Cargo:</label><input type="text" @bind="editEmployee.JobTitle" class="form-control" disabled="@isEditing" required /></div><div class="form-group"><label>Fecha de Nacimiento:</label><CustomDateInput Value="@editEmployee.BirthDate" ValueChanged="OnEditBirthDateChanged" Disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Estado Civil:</label><select @bind="editEmployee.MaritalStatus" class="form-control" disabled="@isEditing"><option value="S">Soltero/a</option><option value="M">Casado/a</option><option value="D">Divorciado/a</option><option value="W">Viudo/a</option></select></div><div class="form-group"><label>Género:</label><select @bind="editEmployee.Gender" class="form-control" disabled="@isEditing"><option value="M">Masculino</option><option value="F">Femenino</option></select></div></div>
+                    <div class="form-row"><div class="form-group"><label>Fecha de Contratación:</label><CustomDateInput Value="@editEmployee.HireDate" ValueChanged="OnEditHireDateChanged" Disabled="@isEditing" /></div><div class="form-group"><label>Tipo de Empleado:</label><select @bind="editEmployeeSalariedFlagString" class="form-control" disabled="@isEditing"><option value="true">Asalariado</option><option value="false">Por Horas</option></select></div></div>
+                    <div class="form-row"><div class="form-group"><label>Horas de Vacaciones:</label><input type="number" @bind="editEmployee.VacationHours" class="form-control" min="0" disabled="@isEditing" /></div><div class="form-group"><label>Horas por Enfermedad:</label><input type="number" @bind="editEmployee.SickLeaveHours" class="form-control" min="0" disabled="@isEditing" /></div></div>
+                    <div class="form-row"><div class="form-group"><label>Estado:</label><div class="form-check"><input type="checkbox" class="form-check-input" id="chkEstado" @bind="editEmployee.CurrentFlag" disabled="@isEditing" /><label class="form-check-label" for="chkEstado">Activo</label></div></div></div>
+                </form>
+                @if (!string.IsNullOrEmpty(editErrorMessage)){<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i>@editErrorMessage</div>}
+            </div>
+            <div class="modal-footer"><button class="btn-gradient btn-outline" @onclick="CloseEditModal" disabled="@isEditing">Cancelar</button><button class="btn-gradient" @onclick="ConfirmEdit" disabled="@isEditing">@if (isEditing){<i class="fas fa-spinner fa-spin"></i><span>Guardando...</span>}else{<i class="fas fa-save"></i><span>Guardar Cambios</span>}</button></div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showDeleteModal;
+    private bool isDeleting;
+    private string deleteErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.Employee? selectedEmployee;
+    private bool showEditModal;
+    private bool isEditing;
+    private string editErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.Employee? editEmployee;
+    private bool showAddModal;
+    private bool isCreating;
+    private string addErrorMessage = string.Empty;
+    private AdventureWorks.Enterprise.WebApp.Models.Employee? newEmployee;
+    private string searchTerm = string.Empty;
+    private string sortBy = "EmployeeId";
+    private string sortDirection = "asc";
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalEmployees;
+    private int activeEmployeesCount;
+    private AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.Employee>? pagedResult;
+    private Timer? searchTimer;
+    private bool hireDateError;
+
+    private string employeeSalariedFlagString { get => newEmployee?.SalariedFlag.ToString().ToLowerInvariant() ?? string.Empty; set { if (newEmployee != null && bool.TryParse(value, out var r)) newEmployee.SalariedFlag = r; } }
+    private string editEmployeeSalariedFlagString { get => editEmployee?.SalariedFlag.ToString().ToLowerInvariant() ?? string.Empty; set { if (editEmployee != null && bool.TryParse(value, out var r)) editEmployee.SalariedFlag = r; } }
+
+    protected override async Task OnInitializedAsync() { await LoadEmployeesCount(); await LoadEmployees(); }
+
+    private string FormatEmployeeName(string? loginId)
+    { if (string.IsNullOrWhiteSpace(loginId)) return "Sin nombre"; var clean = loginId.Replace("adventure-works\\", ""); while (clean.Length > 0 && char.IsDigit(clean[^1])) clean = clean[..^1]; if (clean.Length == 0) return loginId; return clean.Length == 1 ? clean.ToUpperInvariant() : char.ToUpperInvariant(clean[0]) + clean[1..].ToLowerInvariant(); }
+
+    private async Task LoadEmployeesCount()
+    { try { totalEmployees = await ApiService.GetEmployeesCountAsync(); var all = await ApiService.GetEmployeesAsync(); activeEmployeesCount = all.Count(e => e.CurrentFlag); } catch { totalEmployees = 0; activeEmployeesCount = 0; } }
+
+    private async Task LoadEmployees()
+    {
+        try
+        {
+            isLoading = true; StateHasChanged();
+            var paginationParams = new AdventureWorks.Enterprise.WebApp.Models.PaginationParams { Page = currentPage, PageSize = pageSize, Search = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm, SortBy = sortBy, SortDirection = sortDirection };
+            try { pagedResult = await ApiService.GetEmployeesPagedAsync(paginationParams); }
+            catch { var all = await ApiService.GetEmployeesAsync(); pagedResult = SimulateClientPagination(all); }
+        }
+        finally { isLoading = false; StateHasChanged(); }
+    }
+
+    private AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.Employee> SimulateClientPagination(List<AdventureWorks.Enterprise.WebApp.Models.Employee> all)
+    {
+        var filtered = all.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var search = searchTerm.ToLowerInvariant();
+            filtered = filtered.Where(e => FormatEmployeeName(e.LoginId).ToLowerInvariant().Contains(search)
+                || e.LoginId.ToLowerInvariant().Contains(search)
+                || e.JobTitle.ToLowerInvariant().Contains(search)
+                || (!string.IsNullOrEmpty(e.NationalIdNumber) && e.NationalIdNumber.Contains(search, StringComparison.OrdinalIgnoreCase))
+                || e.EmployeeId.ToString().Contains(search));
+        }
+        var desc = sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+        filtered = sortBy.ToLowerInvariant() switch
+        {
+            "employeeid" => desc ? filtered.OrderByDescending(e => e.EmployeeId) : filtered.OrderBy(e => e.EmployeeId),
+            "loginid" => desc ? filtered.OrderByDescending(e => e.LoginId) : filtered.OrderBy(e => e.LoginId),
+            "jobtitle" => desc ? filtered.OrderByDescending(e => e.JobTitle) : filtered.OrderBy(e => e.JobTitle),
+            "hiredate" => desc ? filtered.OrderByDescending(e => e.HireDate) : filtered.OrderBy(e => e.HireDate),
+            "nationalidnumber" => desc ? filtered.OrderByDescending(e => e.NationalIdNumber ?? string.Empty) : filtered.OrderBy(e => e.NationalIdNumber ?? string.Empty),
+            _ => desc ? filtered.OrderByDescending(e => e.EmployeeId) : filtered.OrderBy(e => e.EmployeeId)
+        };
+        var total = filtered.Count();
+        var items = filtered.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+        return new AdventureWorks.Enterprise.WebApp.Models.PagedResult<AdventureWorks.Enterprise.WebApp.Models.Employee> { Items = items, TotalCount = total, CurrentPage = currentPage, PageSize = pageSize };
+    }
+
+    private Task NavigateToPageAsync(int targetPage) { var maxPages = pagedResult?.TotalPages ?? 1; if (targetPage < 1 || targetPage > maxPages || targetPage == currentPage) return Task.CompletedTask; currentPage = targetPage; return LoadEmployees(); }
+    private bool CanGoToPreviousPage() => currentPage > 1;
+    private bool CanGoToNextPage() => currentPage < (pagedResult?.TotalPages ?? 1);
+
+    private void OnSearchChanged() { searchTimer?.Dispose(); searchTimer = new Timer(_ => InvokeAsync(async () => { currentPage = 1; await LoadEmployees(); }), null, 500, Timeout.Infinite); }
+    private Task OnPageSizeChangedAsync() { currentPage = 1; return LoadEmployees(); }
+    private Task OnSortChangedAsync() { currentPage = 1; return LoadEmployees(); }
+    private Task ToggleSortDirection() { sortDirection = sortDirection == "asc" ? "desc" : "asc"; return LoadEmployees(); }
+    private Task ClearFilters() { searchTerm = string.Empty; currentPage = 1; return LoadEmployees(); }
+
+    private List<int> GetPageNumbers() { if (pagedResult == null) return new(); const int maxVisible = 5; var pages = new List<int>(); var total = pagedResult.TotalPages; if (total <= maxVisible) { for (int i = 1; i <= total; i++) pages.Add(i); } else { int start = Math.Max(1, currentPage - 2); int end = Math.Min(total, start + maxVisible - 1); if (end - start < maxVisible - 1) start = Math.Max(1, end - maxVisible + 1); for (int i = start; i <= end; i++) pages.Add(i); } return pages; }
+
+    private async Task RefreshData() { searchTerm = string.Empty; currentPage = 1; await LoadEmployeesCount(); await LoadEmployees(); }
+
+    private void ShowAddEmployeeModal() { newEmployee = new AdventureWorks.Enterprise.WebApp.Models.Employee { NationalIdNumber = string.Empty, LoginId = string.Empty, JobTitle = string.Empty, BirthDate = DateTime.Today.AddYears(-25), MaritalStatus = string.Empty, Gender = string.Empty, HireDate = DateTime.Today, SalariedFlag = true, VacationHours = 0, SickLeaveHours = 0, CurrentFlag = true }; addErrorMessage = string.Empty; showAddModal = true; }
+    private void CloseAddModal() { if (!isCreating) { showAddModal = false; newEmployee = null; addErrorMessage = string.Empty; } }
+
+    private async Task ConfirmAdd()
+    {
+        if (newEmployee == null || isCreating) return; var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(newEmployee.NationalIdNumber)) errors.Add("El ID Nacional es obligatorio.");
+        if (string.IsNullOrWhiteSpace(newEmployee.LoginId)) errors.Add("El Login ID es obligatorio.");
+        if (string.IsNullOrWhiteSpace(newEmployee.JobTitle)) errors.Add("El Cargo es obligatorio.");
+        if (string.IsNullOrWhiteSpace(newEmployee.MaritalStatus)) errors.Add("Debe seleccionar un Estado Civil.");
+        if (string.IsNullOrWhiteSpace(newEmployee.Gender)) errors.Add("Debe seleccionar un Género.");
+        if (newEmployee.BirthDate > DateTime.Today.AddYears(-18)) errors.Add("El empleado debe ser mayor de 18 años.");
+        if (newEmployee.HireDate > DateTime.Today) errors.Add($"La Fecha de Contratación no puede ser futura. Máximo: {DateTime.Today:dd/MM/yyyy}");
+        if (string.IsNullOrWhiteSpace(employeeSalariedFlagString)) errors.Add("Debe seleccionar el Tipo de Empleado.");
+        if (errors.Any()) { addErrorMessage = string.Join(" ", errors); return; }
+        try
+        {
+            isCreating = true; addErrorMessage = string.Empty; StateHasChanged();
+            if (await ApiService.CheckEmployeeDuplicatesAsync(newEmployee.NationalIdNumber, newEmployee.LoginId)) { addErrorMessage = "Error: Ya existe un empleado con el mismo ID Nacional o Login ID."; return; }
+            newEmployee.CurrentFlag = true; var created = await ApiService.CreateEmployeeAsync(newEmployee);
+            if (created != null)
+            { showAddModal = false; var name = FormatEmployeeName(created.LoginId); newEmployee = null; await NotificationService.ShowSuccessAsync($"Empleado '{name}' creado exitosamente con ID: {created.EmployeeId}"); currentPage = 1; await LoadEmployeesCount(); await LoadEmployees(); }
+            else { addErrorMessage = "No se pudo crear el empleado."; await NotificationService.ShowErrorAsync("Error al crear el empleado."); }
+        }
+        catch (Exception ex) { addErrorMessage = ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ? "Error: El ID Nacional o Login ID ya existe." : $"Error al crear empleado: {ex.Message}"; await NotificationService.ShowErrorAsync("Error al crear el empleado."); }
+        finally { isCreating = false; StateHasChanged(); }
+    }
+
+    private void ViewEmployee(AdventureWorks.Enterprise.WebApp.Models.Employee e) => Navigation.NavigateTo($"/Employees/{e.EmployeeId}");
+    private void EditEmployee(AdventureWorks.Enterprise.WebApp.Models.Employee e) { editEmployee = CloneEmployee(e); editErrorMessage = string.Empty; showEditModal = true; }
+    private void DeleteEmployee(AdventureWorks.Enterprise.WebApp.Models.Employee e) { selectedEmployee = e; deleteErrorMessage = string.Empty; showDeleteModal = true; }
+    private void CloseDeleteModal() { if (!isDeleting) { showDeleteModal = false; selectedEmployee = null; deleteErrorMessage = string.Empty; } }
+    private void CloseEditModal() { if (!isEditing) { showEditModal = false; editEmployee = null; editErrorMessage = string.Empty; } }
+
+    private async Task ConfirmDelete()
+    {
+        if (selectedEmployee == null || isDeleting) return; var name = FormatEmployeeName(selectedEmployee.LoginId); try
+        { isDeleting = true; deleteErrorMessage = string.Empty; StateHasChanged(); var success = await ApiService.DeleteEmployeeAsync(selectedEmployee.EmployeeId); if (success)
+            { showDeleteModal = false; selectedEmployee = null; await NotificationService.ShowSuccessAsync($"Empleado '{name}' eliminado exitosamente."); if (pagedResult?.Items.Count == 1 && currentPage > 1) currentPage--; await LoadEmployeesCount(); await LoadEmployees(); }
+            else { deleteErrorMessage = "No se pudo eliminar el empleado."; await NotificationService.ShowErrorAsync("Error al eliminar el empleado."); } }
+        catch (Exception ex) { deleteErrorMessage = $"Error: {ex.Message}"; await NotificationService.ShowErrorAsync("Error al eliminar el empleado."); }
+        finally { isDeleting = false; StateHasChanged(); }
+    }
+
+    private async Task ConfirmEdit()
+    {
+        if (editEmployee == null || isEditing) return; var name = FormatEmployeeName(editEmployee.LoginId); try
+        { isEditing = true; editErrorMessage = string.Empty; StateHasChanged(); var success = await ApiService.UpdateEmployeeAsync(editEmployee.EmployeeId, editEmployee); if (success)
+            { showEditModal = false; editEmployee = null; await NotificationService.ShowSuccessAsync($"Empleado '{name}' actualizado exitosamente."); await LoadEmployees(); }
+            else { editErrorMessage = "No se pudo actualizar el empleado."; await NotificationService.ShowErrorAsync("Error al actualizar el empleado."); } }
+        catch (Exception ex) { editErrorMessage = $"Error: {ex.Message}"; await NotificationService.ShowErrorAsync("Error al actualizar el empleado."); }
+        finally { isEditing = false; StateHasChanged(); }
+    }
+
+    private AdventureWorks.Enterprise.WebApp.Models.Employee CloneEmployee(AdventureWorks.Enterprise.WebApp.Models.Employee e) => new() { EmployeeId = e.EmployeeId, NationalIdNumber = e.NationalIdNumber, LoginId = e.LoginId, JobTitle = e.JobTitle, BirthDate = e.BirthDate, MaritalStatus = e.MaritalStatus, Gender = e.Gender, HireDate = e.HireDate, SalariedFlag = e.SalariedFlag, VacationHours = e.VacationHours, SickLeaveHours = e.SickLeaveHours, CurrentFlag = e.CurrentFlag };
+    private string GetEmployeeStatusClass(bool currentFlag) => currentFlag ? "status-completed" : "status-cancelled";
+
+    private void OnHireDateChanged(DateTime d) { if (newEmployee != null) { newEmployee.HireDate = d; hireDateError = newEmployee.HireDate > DateTime.Today; } }
+    private void OnBirthDateChanged(DateTime d) { if (newEmployee != null) newEmployee.BirthDate = d; }
+    private void OnEditHireDateChanged(DateTime d) { if (editEmployee != null) editEmployee.HireDate = d; }
+    private void OnEditBirthDateChanged(DateTime d) { if (editEmployee != null) editEmployee.BirthDate = d; }
+
+    public void Dispose() { searchTimer?.Dispose(); }
+}

@@ -1,0 +1,24 @@
+﻿@* Página de error genérica con información de diagnóstico *@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Error</PageTitle>
+
+<h1 class="text-danger">Error.</h1>
+<h2 class="text-danger">Ocurrió un error mientras se procesaba su solicitud.</h2>
+
+@if (ShowRequestId)
+{
+    <p><strong>Id. de solicitud:</strong> <code>@RequestId</code></p>
+}
+
+<h3>Modo de desarrollo</h3>
+<p>En el entorno <strong>Desarrollo</strong> se mostrará información más detallada sobre el error.</p>
+<p><strong>No habilite Desarrollo en producción.</strong> Puede exponer datos sensibles. Para activar el modo local establezca <strong>ASPNETCORE_ENVIRONMENT=Development</strong> y reinicie la aplicación.</p>
+
+@code{
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+    protected override void OnInitialized() => RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}
